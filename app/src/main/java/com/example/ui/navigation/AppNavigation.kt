@@ -52,6 +52,20 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import com.example.data.repository.ThemeMode
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.ui.theme.MotionTokens
+import com.example.ui.theme.pressScale
+
 object Routes {
     const val TODAY = "today"
     const val HISTORY = "history"
@@ -147,8 +161,34 @@ fun AppNavigation(
                         )
                     }
 
+                    val isTodaySelected = currentDestination?.hierarchy?.any { it.route == Routes.TODAY } == true
+                    val isHistorySelected = currentDestination?.hierarchy?.any { it.route == Routes.HISTORY } == true
+                    val isAnalyticsSelected = currentDestination?.hierarchy?.any { it.route == Routes.ANALYTICS } == true
+                    val isSettingsSelected = currentDestination?.hierarchy?.any { it.route == Routes.SETTINGS } == true
+
+                    val todayScale by animateFloatAsState(
+                        targetValue = if (isTodaySelected) 1.08f else 1.0f,
+                        animationSpec = MotionTokens.standardTween(),
+                        label = "todayScale"
+                    )
+                    val historyScale by animateFloatAsState(
+                        targetValue = if (isHistorySelected) 1.08f else 1.0f,
+                        animationSpec = MotionTokens.standardTween(),
+                        label = "historyScale"
+                    )
+                    val analyticsScale by animateFloatAsState(
+                        targetValue = if (isAnalyticsSelected) 1.08f else 1.0f,
+                        animationSpec = MotionTokens.standardTween(),
+                        label = "analyticsScale"
+                    )
+                    val settingsScale by animateFloatAsState(
+                        targetValue = if (isSettingsSelected) 1.08f else 1.0f,
+                        animationSpec = MotionTokens.standardTween(),
+                        label = "settingsScale"
+                    )
+
                     NavigationBarItem(
-                        selected = currentDestination?.hierarchy?.any { it.route == Routes.TODAY } == true,
+                        selected = isTodaySelected,
                         onClick = {
                             navController.navigate(Routes.TODAY) {
                                 popUpTo(navController.graph.findStartDestination().id) {
@@ -158,12 +198,42 @@ fun AppNavigation(
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(Icons.Rounded.Home, contentDescription = "Home") },
-                        label = { Text("Home", fontWeight = if (currentDestination?.hierarchy?.any { it.route == Routes.TODAY } == true) FontWeight.SemiBold else FontWeight.Normal) },
+                        icon = {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.pressScale(0.92f)
+                            ) {
+                                if (isShadowMonarch && isTodaySelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .background(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(
+                                                        Color(0xFF00E5FF).copy(alpha = 0.35f),
+                                                        Color(0xFF8B5CF6).copy(alpha = 0.15f),
+                                                        Color.Transparent
+                                                    )
+                                                ),
+                                                shape = CircleShape
+                                            )
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.Home,
+                                    contentDescription = "Home",
+                                    modifier = Modifier.graphicsLayer {
+                                        scaleX = todayScale
+                                        scaleY = todayScale
+                                    }
+                                )
+                            }
+                        },
+                        label = { Text("Home", fontWeight = if (isTodaySelected) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = navItemColors
                     )
                     NavigationBarItem(
-                        selected = currentDestination?.hierarchy?.any { it.route == Routes.HISTORY } == true,
+                        selected = isHistorySelected,
                         onClick = {
                             navController.navigate(Routes.HISTORY) {
                                 popUpTo(navController.graph.findStartDestination().id) {
@@ -173,12 +243,42 @@ fun AppNavigation(
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(Icons.Rounded.History, contentDescription = "History") },
-                        label = { Text("History", fontWeight = if (currentDestination?.hierarchy?.any { it.route == Routes.HISTORY } == true) FontWeight.SemiBold else FontWeight.Normal) },
+                        icon = {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.pressScale(0.92f)
+                            ) {
+                                if (isShadowMonarch && isHistorySelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .background(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(
+                                                        Color(0xFF00E5FF).copy(alpha = 0.35f),
+                                                        Color(0xFF8B5CF6).copy(alpha = 0.15f),
+                                                        Color.Transparent
+                                                    )
+                                                ),
+                                                shape = CircleShape
+                                            )
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.History,
+                                    contentDescription = "History",
+                                    modifier = Modifier.graphicsLayer {
+                                        scaleX = historyScale
+                                        scaleY = historyScale
+                                    }
+                                )
+                            }
+                        },
+                        label = { Text("History", fontWeight = if (isHistorySelected) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = navItemColors
                     )
                     NavigationBarItem(
-                        selected = currentDestination?.hierarchy?.any { it.route == Routes.ANALYTICS } == true,
+                        selected = isAnalyticsSelected,
                         onClick = {
                             navController.navigate(Routes.ANALYTICS) {
                                 popUpTo(navController.graph.findStartDestination().id) {
@@ -188,12 +288,42 @@ fun AppNavigation(
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(Icons.Rounded.Analytics, contentDescription = "Analytics") },
-                        label = { Text("Analytics", fontWeight = if (currentDestination?.hierarchy?.any { it.route == Routes.ANALYTICS } == true) FontWeight.SemiBold else FontWeight.Normal) },
+                        icon = {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.pressScale(0.92f)
+                            ) {
+                                if (isShadowMonarch && isAnalyticsSelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .background(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(
+                                                        Color(0xFF00E5FF).copy(alpha = 0.35f),
+                                                        Color(0xFF8B5CF6).copy(alpha = 0.15f),
+                                                        Color.Transparent
+                                                    )
+                                                ),
+                                                shape = CircleShape
+                                            )
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.Analytics,
+                                    contentDescription = "Analytics",
+                                    modifier = Modifier.graphicsLayer {
+                                        scaleX = analyticsScale
+                                        scaleY = analyticsScale
+                                    }
+                                )
+                            }
+                        },
+                        label = { Text("Analytics", fontWeight = if (isAnalyticsSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = navItemColors
                     )
                     NavigationBarItem(
-                        selected = currentDestination?.hierarchy?.any { it.route == Routes.SETTINGS } == true,
+                        selected = isSettingsSelected,
                         onClick = {
                             navController.navigate(Routes.SETTINGS) {
                                 popUpTo(navController.graph.findStartDestination().id) {
@@ -203,18 +333,90 @@ fun AppNavigation(
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
-                        label = { Text("Settings", fontWeight = if (currentDestination?.hierarchy?.any { it.route == Routes.SETTINGS } == true) FontWeight.SemiBold else FontWeight.Normal) },
+                        icon = {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.pressScale(0.92f)
+                            ) {
+                                if (isShadowMonarch && isSettingsSelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .background(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(
+                                                        Color(0xFF00E5FF).copy(alpha = 0.35f),
+                                                        Color(0xFF8B5CF6).copy(alpha = 0.15f),
+                                                        Color.Transparent
+                                                    )
+                                                ),
+                                                shape = CircleShape
+                                            )
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Filled.Settings,
+                                    contentDescription = "Settings",
+                                    modifier = Modifier.graphicsLayer {
+                                        scaleX = settingsScale
+                                        scaleY = settingsScale
+                                    }
+                                )
+                            }
+                        },
+                        label = { Text("Settings", fontWeight = if (isSettingsSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = navItemColors
                     )
                 }
             }
         }
     ) { innerPadding ->
+        fun getTabOrder(route: String?): Int {
+            return when (route) {
+                Routes.TODAY -> 0
+                Routes.HISTORY -> 1
+                Routes.ANALYTICS -> 2
+                Routes.SETTINGS -> 3
+                else -> -1
+            }
+        }
+
         NavHost(
             navController = navController,
             startDestination = startRoute,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = {
+                val initialOrder = getTabOrder(initialState.destination.route)
+                val targetOrder = getTabOrder(targetState.destination.route)
+                if (initialOrder != -1 && targetOrder != -1) {
+                    if (targetOrder > initialOrder) {
+                        slideInHorizontally(MotionTokens.standardTween()) { (it * 0.12f).toInt() } + fadeIn(MotionTokens.standardTween())
+                    } else {
+                        slideInHorizontally(MotionTokens.standardTween()) { -(it * 0.12f).toInt() } + fadeIn(MotionTokens.standardTween())
+                    }
+                } else {
+                    fadeIn(MotionTokens.standardTween()) + slideInHorizontally(MotionTokens.standardTween()) { (it * 0.08f).toInt() }
+                }
+            },
+            exitTransition = {
+                val initialOrder = getTabOrder(initialState.destination.route)
+                val targetOrder = getTabOrder(targetState.destination.route)
+                if (initialOrder != -1 && targetOrder != -1) {
+                    if (targetOrder > initialOrder) {
+                        slideOutHorizontally(MotionTokens.standardTween()) { -(it * 0.12f).toInt() } + fadeOut(MotionTokens.standardTween())
+                    } else {
+                        slideOutHorizontally(MotionTokens.standardTween()) { (it * 0.12f).toInt() } + fadeOut(MotionTokens.standardTween())
+                    }
+                } else {
+                    fadeOut(MotionTokens.standardTween()) + slideOutHorizontally(MotionTokens.standardTween()) { -(it * 0.08f).toInt() }
+                }
+            },
+            popEnterTransition = {
+                fadeIn(MotionTokens.standardTween()) + slideInHorizontally(MotionTokens.standardTween()) { -(it * 0.08f).toInt() }
+            },
+            popExitTransition = {
+                fadeOut(MotionTokens.standardTween()) + slideOutHorizontally(MotionTokens.standardTween()) { (it * 0.08f).toInt() }
+            }
         ) {
             composable(Routes.TODAY) {
                 HomeScreen(

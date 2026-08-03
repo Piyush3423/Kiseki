@@ -16,6 +16,17 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.ui.theme.MotionTokens
+import com.example.ui.theme.pressScale
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.rounded.Repeat
@@ -272,6 +283,7 @@ fun HomeScreen(
             if (isShadowMonarch) {
                 Box(
                     modifier = Modifier
+                        .pressScale(0.92f)
                         .clip(RoundedCornerShape(16.dp))
                         .background(
                             Brush.linearGradient(
@@ -300,6 +312,7 @@ fun HomeScreen(
             } else {
                 androidx.compose.material3.FloatingActionButton(
                     onClick = onAddTaskClick,
+                    modifier = Modifier.pressScale(0.92f),
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
@@ -339,92 +352,62 @@ fun HomeScreen(
                         .fillMaxWidth()
                         .padding(top = 48.dp, start = 24.dp, end = 24.dp, bottom = 12.dp)
                 ) {
-                    if (!isSearchActive) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    AnimatedContent(
+                        targetState = isSearchActive,
+                        transitionSpec = {
+                            (fadeIn(animationSpec = MotionTokens.standardTween()) + expandVertically()) togetherWith
+                                    (fadeOut(animationSpec = MotionTokens.standardTween()) + shrinkVertically())
+                        },
+                        label = "SearchHeaderTransition"
+                    ) { searchActive ->
+                        if (!searchActive) {
                             Row(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                KisekiLogoBadge(
-                                    badgeSize = 44.dp,
-                                    logoSize = 28.dp
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = "Kiseki",
-                                        style = MaterialTheme.typography.headlineMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = (-0.5).sp
-                                        ),
-                                        color = MaterialTheme.colorScheme.onBackground
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    KisekiLogoBadge(
+                                        badgeSize = 44.dp,
+                                        logoSize = 28.dp
                                     )
-                                    Text(
-                                        text = "Shape your day. Build your story.",
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontWeight = FontWeight.Medium
-                                        ),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { isSearchActive = true }) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Search,
-                                        contentDescription = "Search tasks",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                IconButton(onClick = { showFilterBottomSheet = true }) {
-                                    if (hasActiveFilters) {
-                                        BadgedBox(badge = { Badge() }) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.FilterList,
-                                                contentDescription = "Filter and sort tasks",
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Rounded.FilterList,
-                                            contentDescription = "Filter and sort tasks",
-                                            tint = MaterialTheme.colorScheme.onSurface
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "Kiseki",
+                                            style = MaterialTheme.typography.headlineMedium.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = (-0.5).sp
+                                            ),
+                                            color = MaterialTheme.colorScheme.onBackground
+                                        )
+                                        Text(
+                                            text = "Shape your day. Build your story.",
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontWeight = FontWeight.Medium
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
-                            }
-                        }
-                    } else {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Search tasks...") },
-                            singleLine = true,
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Search,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            trailingIcon = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { searchQuery = "" }) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Clear,
-                                                contentDescription = "Clear search",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
+                                    IconButton(
+                                        onClick = { isSearchActive = true },
+                                        modifier = Modifier.pressScale(0.9f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Search,
+                                            contentDescription = "Search tasks",
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
                                     }
-                                    IconButton(onClick = { showFilterBottomSheet = true }) {
+                                    IconButton(
+                                        onClick = { showFilterBottomSheet = true },
+                                        modifier = Modifier.pressScale(0.9f)
+                                    ) {
                                         if (hasActiveFilters) {
                                             BadgedBox(badge = { Badge() }) {
                                                 Icon(
@@ -437,32 +420,84 @@ fun HomeScreen(
                                             Icon(
                                                 imageVector = Icons.Rounded.FilterList,
                                                 contentDescription = "Filter and sort tasks",
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("Search tasks...") },
+                                singleLine = true,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Search,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                trailingIcon = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(
+                                                onClick = { searchQuery = "" },
+                                                modifier = Modifier.pressScale(0.9f)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Clear,
+                                                    contentDescription = "Clear search",
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = { showFilterBottomSheet = true },
+                                            modifier = Modifier.pressScale(0.9f)
+                                        ) {
+                                            if (hasActiveFilters) {
+                                                BadgedBox(badge = { Badge() }) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.FilterList,
+                                                        contentDescription = "Filter and sort tasks",
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.FilterList,
+                                                    contentDescription = "Filter and sort tasks",
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                searchQuery = ""
+                                                isSearchActive = false
+                                            },
+                                            modifier = Modifier.pressScale(0.9f)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Close,
+                                                contentDescription = "Close search",
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
-                                    IconButton(
-                                        onClick = {
-                                            searchQuery = ""
-                                            isSearchActive = false
-                                        }
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Close,
-                                            contentDescription = "Close search",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            },
-                            shape = RoundedCornerShape(16.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -1064,6 +1099,7 @@ fun TaskItemCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .pressScale(0.98f)
             .graphicsLayer(scaleX = scale, scaleY = scale)
             .clip(RoundedCornerShape(16.dp))
             .background(cardBgColor)
@@ -1388,6 +1424,12 @@ fun WeeklyDateSelector(
                 val isSelected = (date == selectedDate)
                 val isTodayDate = (date == today)
 
+                val dayScale by animateFloatAsState(
+                    targetValue = if (isSelected) 1.04f else 1.0f,
+                    animationSpec = MotionTokens.fastTween(),
+                    label = "DaySelectionScale"
+                )
+
                 val backgroundColor = when {
                     isSelected -> if (isShadowMonarch) Color.Unspecified else MaterialTheme.colorScheme.primary
                     isTodayDate -> if (isShadowMonarch) Color(0xFF13172A) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
@@ -1409,6 +1451,8 @@ fun WeeklyDateSelector(
                 Box(
                     modifier = Modifier
                         .weight(1f)
+                        .graphicsLayer(scaleX = dayScale, scaleY = dayScale)
+                        .pressScale(0.95f)
                         .clip(RoundedCornerShape(14.dp))
                         .then(
                             if (isSelected && isShadowMonarch) {

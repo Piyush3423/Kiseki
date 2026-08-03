@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import com.example.ui.theme.pressScale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -686,7 +687,7 @@ fun ThemeOptionChip(
 
     Surface(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.pressScale(0.96f),
         shape = RoundedCornerShape(14.dp),
         color = containerColor,
         border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor)
