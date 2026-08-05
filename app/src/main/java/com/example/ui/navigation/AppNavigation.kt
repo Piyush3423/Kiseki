@@ -1,5 +1,7 @@
 package com.example.ui.navigation
 
+import com.example.ui.theme.*
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -126,30 +128,21 @@ fun AppNavigation(
                 val isShadowMonarch = userPreferences.themeMode == ThemeMode.SHADOW_MONARCH
 
                 NavigationBar(
-                    containerColor = if (isShadowMonarch) Color(0xFF0C0E1A) else MaterialTheme.colorScheme.surface,
+                    containerColor = if (isShadowMonarch) MonarchElevatedBackground else MaterialTheme.colorScheme.surface,
                     tonalElevation = if (isShadowMonarch) 0.dp else 3.dp,
                     modifier = Modifier.border(
                         width = 1.dp,
-                        brush = if (isShadowMonarch) {
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color(0xFF8B5CF6).copy(alpha = 0.5f),
-                                    Color(0xFF00E5FF).copy(alpha = 0.5f)
-                                )
-                            )
-                        } else {
-                            SolidColor(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                        },
+                        brush = SolidColor(if (isShadowMonarch) MonarchBorderSubtle else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
                         shape = RectangleShape
                     )
                 ) {
                     val navItemColors = if (isShadowMonarch) {
                         NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF00E5FF),
-                            selectedTextColor = Color(0xFF00E5FF),
-                            indicatorColor = Color(0xFF281446),
-                            unselectedIconColor = Color(0xFF64748B),
-                            unselectedTextColor = Color(0xFF64748B)
+                            selectedIconColor = MonarchTextPrimary,
+                            selectedTextColor = MonarchTextPrimary,
+                            indicatorColor = MonarchSurfaceElevated,
+                            unselectedIconColor = MonarchTextMuted,
+                            unselectedTextColor = MonarchTextMuted
                         )
                     } else {
                         NavigationBarItemDefaults.colors(
@@ -199,35 +192,14 @@ fun AppNavigation(
                             }
                         },
                         icon = {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.pressScale(0.92f)
-                            ) {
-                                if (isShadowMonarch && isTodaySelected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(30.dp)
-                                            .background(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(
-                                                        Color(0xFF00E5FF).copy(alpha = 0.35f),
-                                                        Color(0xFF8B5CF6).copy(alpha = 0.15f),
-                                                        Color.Transparent
-                                                    )
-                                                ),
-                                                shape = CircleShape
-                                            )
-                                    )
+                            Icon(
+                                imageVector = Icons.Rounded.Home,
+                                contentDescription = "Home",
+                                modifier = Modifier.graphicsLayer {
+                                    scaleX = todayScale
+                                    scaleY = todayScale
                                 }
-                                Icon(
-                                    imageVector = Icons.Rounded.Home,
-                                    contentDescription = "Home",
-                                    modifier = Modifier.graphicsLayer {
-                                        scaleX = todayScale
-                                        scaleY = todayScale
-                                    }
-                                )
-                            }
+                            )
                         },
                         label = { Text("Home", fontWeight = if (isTodaySelected) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = navItemColors
@@ -244,35 +216,14 @@ fun AppNavigation(
                             }
                         },
                         icon = {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.pressScale(0.92f)
-                            ) {
-                                if (isShadowMonarch && isHistorySelected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(30.dp)
-                                            .background(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(
-                                                        Color(0xFF00E5FF).copy(alpha = 0.35f),
-                                                        Color(0xFF8B5CF6).copy(alpha = 0.15f),
-                                                        Color.Transparent
-                                                    )
-                                                ),
-                                                shape = CircleShape
-                                            )
-                                    )
+                            Icon(
+                                imageVector = Icons.Rounded.History,
+                                contentDescription = "History",
+                                modifier = Modifier.graphicsLayer {
+                                    scaleX = historyScale
+                                    scaleY = historyScale
                                 }
-                                Icon(
-                                    imageVector = Icons.Rounded.History,
-                                    contentDescription = "History",
-                                    modifier = Modifier.graphicsLayer {
-                                        scaleX = historyScale
-                                        scaleY = historyScale
-                                    }
-                                )
-                            }
+                            )
                         },
                         label = { Text("History", fontWeight = if (isHistorySelected) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = navItemColors
@@ -289,35 +240,14 @@ fun AppNavigation(
                             }
                         },
                         icon = {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.pressScale(0.92f)
-                            ) {
-                                if (isShadowMonarch && isAnalyticsSelected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(30.dp)
-                                            .background(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(
-                                                        Color(0xFF00E5FF).copy(alpha = 0.35f),
-                                                        Color(0xFF8B5CF6).copy(alpha = 0.15f),
-                                                        Color.Transparent
-                                                    )
-                                                ),
-                                                shape = CircleShape
-                                            )
-                                    )
+                            Icon(
+                                imageVector = Icons.Rounded.Analytics,
+                                contentDescription = "Analytics",
+                                modifier = Modifier.graphicsLayer {
+                                    scaleX = analyticsScale
+                                    scaleY = analyticsScale
                                 }
-                                Icon(
-                                    imageVector = Icons.Rounded.Analytics,
-                                    contentDescription = "Analytics",
-                                    modifier = Modifier.graphicsLayer {
-                                        scaleX = analyticsScale
-                                        scaleY = analyticsScale
-                                    }
-                                )
-                            }
+                            )
                         },
                         label = { Text("Analytics", fontWeight = if (isAnalyticsSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = navItemColors
@@ -334,35 +264,14 @@ fun AppNavigation(
                             }
                         },
                         icon = {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.pressScale(0.92f)
-                            ) {
-                                if (isShadowMonarch && isSettingsSelected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(30.dp)
-                                            .background(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(
-                                                        Color(0xFF00E5FF).copy(alpha = 0.35f),
-                                                        Color(0xFF8B5CF6).copy(alpha = 0.15f),
-                                                        Color.Transparent
-                                                    )
-                                                ),
-                                                shape = CircleShape
-                                            )
-                                    )
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "Settings",
+                                modifier = Modifier.graphicsLayer {
+                                    scaleX = settingsScale
+                                    scaleY = settingsScale
                                 }
-                                Icon(
-                                    imageVector = Icons.Filled.Settings,
-                                    contentDescription = "Settings",
-                                    modifier = Modifier.graphicsLayer {
-                                        scaleX = settingsScale
-                                        scaleY = settingsScale
-                                    }
-                                )
-                            }
+                            )
                         },
                         label = { Text("Settings", fontWeight = if (isSettingsSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = navItemColors
@@ -390,12 +299,12 @@ fun AppNavigation(
                 val targetOrder = getTabOrder(targetState.destination.route)
                 if (initialOrder != -1 && targetOrder != -1) {
                     if (targetOrder > initialOrder) {
-                        slideInHorizontally(MotionTokens.standardTween()) { (it * 0.12f).toInt() } + fadeIn(MotionTokens.standardTween())
+                        slideInHorizontally(MotionTokens.standardTween()) { 48 } + fadeIn(MotionTokens.appearingTween())
                     } else {
-                        slideInHorizontally(MotionTokens.standardTween()) { -(it * 0.12f).toInt() } + fadeIn(MotionTokens.standardTween())
+                        slideInHorizontally(MotionTokens.standardTween()) { -48 } + fadeIn(MotionTokens.appearingTween())
                     }
                 } else {
-                    fadeIn(MotionTokens.standardTween()) + slideInHorizontally(MotionTokens.standardTween()) { (it * 0.08f).toInt() }
+                    fadeIn(MotionTokens.appearingTween()) + slideInHorizontally(MotionTokens.standardTween()) { 48 }
                 }
             },
             exitTransition = {
@@ -403,19 +312,19 @@ fun AppNavigation(
                 val targetOrder = getTabOrder(targetState.destination.route)
                 if (initialOrder != -1 && targetOrder != -1) {
                     if (targetOrder > initialOrder) {
-                        slideOutHorizontally(MotionTokens.standardTween()) { -(it * 0.12f).toInt() } + fadeOut(MotionTokens.standardTween())
+                        slideOutHorizontally(MotionTokens.standardTween()) { -48 } + fadeOut(MotionTokens.disappearingTween())
                     } else {
-                        slideOutHorizontally(MotionTokens.standardTween()) { (it * 0.12f).toInt() } + fadeOut(MotionTokens.standardTween())
+                        slideOutHorizontally(MotionTokens.standardTween()) { 48 } + fadeOut(MotionTokens.disappearingTween())
                     }
                 } else {
-                    fadeOut(MotionTokens.standardTween()) + slideOutHorizontally(MotionTokens.standardTween()) { -(it * 0.08f).toInt() }
+                    fadeOut(MotionTokens.disappearingTween()) + slideOutHorizontally(MotionTokens.standardTween()) { -48 }
                 }
             },
             popEnterTransition = {
-                fadeIn(MotionTokens.standardTween()) + slideInHorizontally(MotionTokens.standardTween()) { -(it * 0.08f).toInt() }
+                fadeIn(MotionTokens.appearingTween()) + slideInHorizontally(MotionTokens.standardTween()) { -48 }
             },
             popExitTransition = {
-                fadeOut(MotionTokens.standardTween()) + slideOutHorizontally(MotionTokens.standardTween()) { (it * 0.08f).toInt() }
+                fadeOut(MotionTokens.disappearingTween()) + slideOutHorizontally(MotionTokens.standardTween()) { 48 }
             }
         ) {
             composable(Routes.TODAY) {

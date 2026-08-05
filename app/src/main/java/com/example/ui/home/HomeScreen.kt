@@ -55,6 +55,13 @@ import com.example.ui.taskgroup.parseGroupColor
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
@@ -69,6 +76,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -78,6 +86,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -90,15 +99,22 @@ import com.example.data.model.Priority
 import com.example.data.model.RepeatType
 import com.example.ui.category.CategoryDotIndicator
 import com.example.ui.category.ManageCategoriesDialog
+import com.example.ui.category.parseCategoryColor
 import com.example.ui.theme.NavBarBg
+import com.example.ui.theme.*
 import com.example.viewmodel.ActivityTaskViewModel
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.rounded.FilterList
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -106,6 +122,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import com.example.data.repository.ThemeMode
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Add
 
 @Composable
@@ -281,32 +300,25 @@ fun HomeScreen(
         containerColor = Color.Transparent,
         floatingActionButton = {
             if (isShadowMonarch) {
-                Box(
+                androidx.compose.material3.FloatingActionButton(
+                    onClick = onAddTaskClick,
                     modifier = Modifier
-                        .pressScale(0.92f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(Color(0xFF2E1065), Color(0xFF0F172A))
-                            )
-                        )
-                        .border(
-                            BorderStroke(
-                                1.5.dp,
-                                Brush.horizontalGradient(
-                                    colors = listOf(Color(0xFFA855F7), Color(0xFF00E5FF))
-                                )
-                            ),
-                            RoundedCornerShape(16.dp)
-                        )
-                        .clickable { onAddTaskClick() }
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
+                        .size(54.dp)
+                        .pressScale(0.98f),
+                    shape = RoundedCornerShape(16.dp),
+                    containerColor = Color(0xFF7967E8),
+                    contentColor = Color.White,
+                    elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 1.dp,
+                        pressedElevation = 2.dp,
+                        focusedElevation = 1.dp,
+                        hoveredElevation = 1.dp
+                    )
                 ) {
                     Icon(
-                        Icons.Filled.Add,
+                        imageVector = Icons.Filled.Add,
                         contentDescription = "Add Task",
-                        tint = Color(0xFF00E5FF)
+                        tint = Color.White
                     )
                 }
             } else {
@@ -328,13 +340,9 @@ fun HomeScreen(
         ) {
             // Header
             if (isShadowMonarch) {
-                MonarchStatusHeader(
+                MonarchHomeHeader(
                     selectedDate = selectedDate,
-                    completionPercentage = completionPercentage,
-                    completedCount = completedSelectedDateTasks,
-                    totalCount = totalSelectedDateTasks,
                     streak = currentStreak,
-                    rank = rankLabel,
                     isSearchActive = isSearchActive,
                     searchQuery = searchQuery,
                     onSearchQueryChange = { searchQuery = it },
@@ -346,6 +354,161 @@ fun HomeScreen(
                     },
                     hasActiveFilters = hasActiveFilters
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                MonarchDailyProgressPanel(
+                    completedCount = completedSelectedDateTasks,
+                    totalCount = totalSelectedDateTasks,
+                    completionPercentage = completionPercentage,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                WeeklyDateSelector(
+                    selectedDate = selectedDate,
+                    today = today,
+                    weekDays = weekDays,
+                    weekRangeText = weekRangeText,
+                    themeMode = themeMode,
+                    onDateSelected = { selectedDate = it },
+                    onPreviousWeek = {
+                        weekOffset--
+                        val newMonday = today.plusWeeks(weekOffset.toLong()).with(DayOfWeek.MONDAY)
+                        selectedDate = newMonday
+                    },
+                    onNextWeek = {
+                        weekOffset++
+                        val newMonday = today.plusWeeks(weekOffset.toLong()).with(DayOfWeek.MONDAY)
+                        selectedDate = newMonday
+                    },
+                    onTodayClick = {
+                        weekOffset = 0
+                        selectedDate = today
+                    }
+                )
+
+                if (hasActiveFilters) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (selectedCategory != "All") {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedCategory = "All" },
+                                label = { Text("Category: $selectedCategory") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove category filter",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MonarchSurfaceSecondary,
+                                    selectedLabelColor = MonarchTextPrimary
+                                )
+                            )
+                        }
+                        if (selectedPriority != "All") {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedPriority = "All" },
+                                label = { Text("Priority: $selectedPriority") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove priority filter",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MonarchSurfaceSecondary,
+                                    selectedLabelColor = MonarchTextPrimary
+                                )
+                            )
+                        }
+                        if (selectedStatus != "All") {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedStatus = "All" },
+                                label = { Text("Status: $selectedStatus") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove status filter",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MonarchSurfaceSecondary,
+                                    selectedLabelColor = MonarchTextPrimary
+                                )
+                            )
+                        }
+                        if (selectedSort != SortOption.DEFAULT) {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedSort = SortOption.DEFAULT },
+                                label = { Text("Sort: ${selectedSort.displayName}") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Reset sort",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MonarchSurfaceSecondary,
+                                    selectedLabelColor = MonarchTextPrimary
+                                )
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                selectedCategory = "All"
+                                selectedPriority = "All"
+                                selectedStatus = "All"
+                                selectedSort = SortOption.DEFAULT
+                            }
+                        ) {
+                            Text("Clear All", color = MonarchPrimary)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Today's Objectives",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = Color(0xFFF2F3F7)
+                    )
+                    Text(
+                        text = "${filteredTasks.size} tasks",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = Color(0xFF737B8E)
+                    )
+                }
             } else {
                 Box(
                     modifier = Modifier
@@ -500,187 +663,194 @@ fun HomeScreen(
                         }
                     }
                 }
-            }
 
-            // Active Filter Chips Row
-            if (hasActiveFilters) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 24.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (selectedCategory != "All") {
-                        FilterChip(
-                            selected = true,
-                            onClick = { selectedCategory = "All" },
-                            label = { Text("Category: $selectedCategory") },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Remove category filter",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        )
-                    }
-                    if (selectedPriority != "All") {
-                        FilterChip(
-                            selected = true,
-                            onClick = { selectedPriority = "All" },
-                            label = { Text("Priority: $selectedPriority") },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Remove priority filter",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        )
-                    }
-                    if (selectedStatus != "All") {
-                        FilterChip(
-                            selected = true,
-                            onClick = { selectedStatus = "All" },
-                            label = { Text("Status: $selectedStatus") },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Remove status filter",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        )
-                    }
-                    if (selectedSort != SortOption.DEFAULT) {
-                        FilterChip(
-                            selected = true,
-                            onClick = { selectedSort = SortOption.DEFAULT },
-                            label = { Text("Sort: ${selectedSort.displayName}") },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Reset sort",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        )
-                    }
-                    TextButton(
-                        onClick = {
-                            selectedCategory = "All"
-                            selectedPriority = "All"
-                            selectedStatus = "All"
-                            selectedSort = SortOption.DEFAULT
-                        }
-                    ) {
-                        Text("Clear All")
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            WeeklyDateSelector(
-                selectedDate = selectedDate,
-                today = today,
-                weekDays = weekDays,
-                weekRangeText = weekRangeText,
-                themeMode = themeMode,
-                onDateSelected = { selectedDate = it },
-                onPreviousWeek = {
-                    weekOffset--
-                    val newMonday = today.plusWeeks(weekOffset.toLong()).with(DayOfWeek.MONDAY)
-                    selectedDate = newMonday
-                },
-                onNextWeek = {
-                    weekOffset++
-                    val newMonday = today.plusWeeks(weekOffset.toLong()).with(DayOfWeek.MONDAY)
-                    selectedDate = newMonday
-                },
-                onTodayClick = {
-                    weekOffset = 0
-                    selectedDate = today
-                }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Main Content
-            if (filteredTasks.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Box(
+                // Active Filter Chips Row
+                if (hasActiveFilters) {
+                    Row(
                         modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "No tasks for this day",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    val emptyMessage = when {
-                        trimmedQuery.isNotEmpty() && hasActiveFilters -> "No tasks match \"$trimmedQuery\" with active filters."
-                        trimmedQuery.isNotEmpty() -> "No tasks found matching \"$trimmedQuery\""
-                        hasActiveFilters -> "No tasks match active filters."
-                        else -> "No tasks scheduled for ${if (selectedDate == today) "today" else selectedDate.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()))}."
-                    }
-                    Text(
-                        text = emptyMessage,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                    if (hasActiveFilters || trimmedQuery.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
+                        if (selectedCategory != "All") {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedCategory = "All" },
+                                label = { Text("Category: $selectedCategory") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove category filter",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        if (selectedPriority != "All") {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedPriority = "All" },
+                                label = { Text("Priority: $selectedPriority") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove priority filter",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        if (selectedStatus != "All") {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedStatus = "All" },
+                                label = { Text("Status: $selectedStatus") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove status filter",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        if (selectedSort != SortOption.DEFAULT) {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedSort = SortOption.DEFAULT },
+                                label = { Text("Sort: ${selectedSort.displayName}") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Reset sort",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
                         TextButton(
                             onClick = {
-                                searchQuery = ""
                                 selectedCategory = "All"
                                 selectedPriority = "All"
                                 selectedStatus = "All"
                                 selectedSort = SortOption.DEFAULT
                             }
                         ) {
-                            Text("Clear filters & search")
+                            Text("Clear All")
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                WeeklyDateSelector(
+                    selectedDate = selectedDate,
+                    today = today,
+                    weekDays = weekDays,
+                    weekRangeText = weekRangeText,
+                    themeMode = themeMode,
+                    onDateSelected = { selectedDate = it },
+                    onPreviousWeek = {
+                        weekOffset--
+                        val newMonday = today.plusWeeks(weekOffset.toLong()).with(DayOfWeek.MONDAY)
+                        selectedDate = newMonday
+                    },
+                    onNextWeek = {
+                        weekOffset++
+                        val newMonday = today.plusWeeks(weekOffset.toLong()).with(DayOfWeek.MONDAY)
+                        selectedDate = newMonday
+                    },
+                    onTodayClick = {
+                        weekOffset = 0
+                        selectedDate = today
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Main Content
+            if (filteredTasks.isEmpty()) {
+                if (isShadowMonarch) {
+                    MonarchEmptyState(
+                        onAddTaskClick = onAddTaskClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "No tasks for this day",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val emptyMessage = when {
+                            trimmedQuery.isNotEmpty() && hasActiveFilters -> "No tasks match \"$trimmedQuery\" with active filters."
+                            trimmedQuery.isNotEmpty() -> "No tasks found matching \"$trimmedQuery\""
+                            hasActiveFilters -> "No tasks match active filters."
+                            else -> "No tasks scheduled for ${if (selectedDate == today) "today" else selectedDate.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()))}."
+                        }
+                        Text(
+                            text = emptyMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        if (hasActiveFilters || trimmedQuery.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            TextButton(
+                                onClick = {
+                                    searchQuery = ""
+                                    selectedCategory = "All"
+                                    selectedPriority = "All"
+                                    selectedStatus = "All"
+                                    selectedSort = SortOption.DEFAULT
+                                }
+                            ) {
+                                Text("Clear filters & search")
+                            }
                         }
                     }
                 }
@@ -1076,261 +1246,245 @@ fun TaskItemCard(
     onRemoveFromGroup: (() -> Unit)? = null
 ) {
     val isShadowMonarch = themeMode == ThemeMode.SHADOW_MONARCH
-    val alpha = if (task.isCompleted) (if (isShadowMonarch) 0.7f else 0.6f) else 1f
-    val scale by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (task.isCompleted && isShadowMonarch) 1.01f else 1f,
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 200),
-        label = "LevelUpPulse"
+    if (isShadowMonarch) {
+        MonarchTaskCard(
+            task = task,
+            categories = categories,
+            groups = groups,
+            onToggleComplete = onToggleComplete,
+            onDelete = onDelete,
+            onEdit = onEdit,
+            onClick = onClick,
+            modifier = modifier,
+            onRemoveFromGroup = onRemoveFromGroup
+        )
+        return
+    }
+
+    val targetAlpha = if (task.isCompleted) 0.7f else 1f
+    val animatedAlpha by animateFloatAsState(
+        targetValue = targetAlpha,
+        animationSpec = tween(durationMillis = 180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "TaskCardAlpha"
     )
 
     val cardBgColor = when {
-        isShadowMonarch && task.isCompleted -> Color(0xFF0B0D18)
-        isShadowMonarch -> Color(0xFF121528)
+        isShadowMonarch -> MonarchSurface
         else -> MaterialTheme.colorScheme.surface
     }
 
     val borderStroke = when {
-        isShadowMonarch && task.isCompleted -> BorderStroke(1.dp, Color(0xFF1B2035))
-        isShadowMonarch && task.priority == Priority.High -> BorderStroke(1.2.dp, Brush.horizontalGradient(listOf(Color(0xFFF43F5E), Color(0xFF8B5CF6))))
-        isShadowMonarch -> BorderStroke(1.dp, Brush.horizontalGradient(listOf(Color(0xFF6B21A8).copy(alpha = 0.5f), Color(0xFF1E3A8A).copy(alpha = 0.5f))))
+        isShadowMonarch -> BorderStroke(1.dp, MonarchBorder)
         else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     }
+
+    val cardRadius = if (isShadowMonarch) MonarchRadius.TaskCard else 16.dp
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .pressScale(0.98f)
-            .graphicsLayer(scaleX = scale, scaleY = scale)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(cardRadius))
             .background(cardBgColor)
             .clickable { onClick() }
-            .border(borderStroke, RoundedCornerShape(16.dp))
-            .padding(16.dp)
-            .alpha(alpha)
+            .border(borderStroke, RoundedCornerShape(cardRadius))
+            .padding(if (isShadowMonarch) 14.dp else 16.dp)
+            .alpha(animatedAlpha)
     ) {
-        Column {
-            if (isShadowMonarch) {
-                Row(
+        Row(modifier = Modifier.fillMaxWidth()) {
+            if (isShadowMonarch && task.priority == Priority.High) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 6.dp),
+                        .width(3.dp)
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MonarchHighPriority)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val questBadgeBg = when {
-                        task.isCompleted -> Color(0xFF064E3B)
-                        task.priority == Priority.High -> Color(0xFF4C0519)
-                        task.priority == Priority.Medium -> Color(0xFF2E1065)
-                        else -> Color(0xFF0F172A)
-                    }
-                    val questBadgeText = when {
-                        task.isCompleted -> "QUEST CLEARED"
-                        task.priority == Priority.High -> "CRITICAL QUEST"
-                        task.priority == Priority.Medium -> "ACTIVE QUEST"
-                        else -> "QUEST"
-                    }
-                    val questBadgeColor = when {
-                        task.isCompleted -> Color(0xFF34D399)
-                        task.priority == Priority.High -> Color(0xFFF43F5E)
-                        task.priority == Priority.Medium -> Color(0xFFA855F7)
-                        else -> Color(0xFF00E5FF)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(questBadgeBg)
-                            .border(BorderStroke(0.8.dp, questBadgeColor.copy(alpha = 0.6f)), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = questBadgeText,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 0.8.sp
-                            ),
-                            color = questBadgeColor
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Checkbox(
-                        checked = task.isCompleted,
-                        onCheckedChange = { onToggleComplete(task) }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = task.title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                        ),
-                        color = when {
-                            task.isCompleted && isShadowMonarch -> Color(0xFF64748B)
-                            task.isCompleted -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            isShadowMonarch -> Color(0xFFF1F5F9)
-                            else -> MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                }
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                // Priority Indicator
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val priorityColor = when (task.priority) {
-                        Priority.High -> if (isShadowMonarch) Color(0xFFF43F5E) else Color(0xFFB3261E)
-                        Priority.Medium -> if (isShadowMonarch) Color(0xFFA855F7) else Color(0xFFF29900)
-                        Priority.Low -> if (isShadowMonarch) Color(0xFF00E5FF) else Color(0xFF1D9BF0)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(priorityColor.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = task.priority.name,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = priorityColor
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(4.dp))
-                    
-                    IconButton(
-                        onClick = { onEdit(task) },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = "Edit Task",
-                            tint = if (isShadowMonarch) Color(0xFF94A3B8) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(4.dp))
-                    
-                    IconButton(
-                        onClick = { onDelete(task) },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Delete,
-                            contentDescription = "Delete Task",
-                            tint = if (isShadowMonarch) Color(0xFF94A3B8) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (task.category.isNotBlank()) {
-                    val catObj = categories.find { it.name.equals(task.category, ignoreCase = true) }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        modifier = Modifier.weight(1f)
                     ) {
-                        CategoryDotIndicator(colorHex = catObj?.colorHex)
+                        Checkbox(
+                            checked = task.isCompleted,
+                            onCheckedChange = { onToggleComplete(task) },
+                            colors = if (isShadowMonarch) {
+                                CheckboxDefaults.colors(
+                                    checkedColor = MonarchPrimary,
+                                    uncheckedColor = MonarchBorder,
+                                    checkmarkColor = Color.White
+                                )
+                            } else CheckboxDefaults.colors()
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = task.category,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isShadowMonarch) Color(0xFF94A3B8) else MaterialTheme.colorScheme.onSurfaceVariant
+                            text = task.title,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = if (isShadowMonarch) FontWeight.Medium else FontWeight.SemiBold,
+                                textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                            ),
+                            color = when {
+                                task.isCompleted && isShadowMonarch -> MonarchTextMuted
+                                task.isCompleted -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                isShadowMonarch -> MonarchTextPrimary
+                                else -> MaterialTheme.colorScheme.onSurface
+                            }
                         )
                     }
-                }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // Priority Indicator & Actions
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val priorityColor = when (task.priority) {
+                            Priority.High -> if (isShadowMonarch) MonarchHighPriority else Color(0xFFB3261E)
+                            Priority.Medium -> if (isShadowMonarch) MonarchMediumPriority else Color(0xFFF29900)
+                            Priority.Low -> if (isShadowMonarch) MonarchLowPriority else Color(0xFF1D9BF0)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(if (isShadowMonarch) MonarchRadius.Chip else 8.dp))
+                                .background(priorityColor.copy(alpha = 0.12f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = task.priority.name,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                color = priorityColor
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.width(4.dp))
+                        
+                        IconButton(
+                            onClick = { onEdit(task) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Edit,
+                                contentDescription = "Edit Task",
+                                tint = if (isShadowMonarch) MonarchTextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
 
-                if (!task.groupId.isNullOrBlank()) {
-                    val groupObj = groups.find { it.id == task.groupId }
-                    if (groupObj != null) {
-                        val groupColor = parseGroupColor(groupObj.color)
+                        Spacer(modifier = Modifier.width(2.dp))
+                        
+                        IconButton(
+                            onClick = { onDelete(task) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Delete,
+                                contentDescription = "Delete Task",
+                                tint = if (isShadowMonarch) MonarchTextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (task.category.isNotBlank()) {
+                        val catObj = categories.find { it.name.equals(task.category, ignoreCase = true) }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(groupColor)
-                            )
+                            CategoryDotIndicator(colorHex = catObj?.colorHex)
                             Text(
-                                text = groupObj.name,
+                                text = task.category,
                                 style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium,
-                                color = groupColor
+                                color = if (isShadowMonarch) MonarchTextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (onRemoveFromGroup != null) {
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Remove from group",
-                                    tint = if (isShadowMonarch) Color(0xFF94A3B8) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        }
+                    }
+
+                    if (!task.groupId.isNullOrBlank()) {
+                        val groupObj = groups.find { it.id == task.groupId }
+                        if (groupObj != null) {
+                            val groupColor = parseGroupColor(groupObj.color)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Box(
                                     modifier = Modifier
-                                        .size(14.dp)
-                                        .clickable { onRemoveFromGroup() }
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(groupColor)
                                 )
+                                Text(
+                                    text = groupObj.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isShadowMonarch) MonarchTextSecondary else groupColor
+                                )
+                                if (onRemoveFromGroup != null) {
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove from group",
+                                        tint = if (isShadowMonarch) MonarchTextMuted else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier
+                                            .size(14.dp)
+                                            .clickable { onRemoveFromGroup() }
+                                    )
+                                }
                             }
                         }
                     }
-                }
-                
-                if (task.dueDate != null) {
-                    Text(
-                        text = "•",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isShadowMonarch) Color(0xFF475569) else MaterialTheme.colorScheme.outline
-                    )
-                    val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                    val formattedDate = dateFormat.format(Date(task.dueDate))
-                    Text(
-                        text = "Due: $formattedDate",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isShadowMonarch) Color(0xFF94A3B8) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                
-                if (task.repeatType != RepeatType.None) {
-                    Text(
-                        text = "•",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isShadowMonarch) Color(0xFF475569) else MaterialTheme.colorScheme.outline
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        if (isShadowMonarch) {
+                    
+                    if (task.dueDate != null) {
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isShadowMonarch) MonarchTextMuted else MaterialTheme.colorScheme.outline
+                        )
+                        val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                        val formattedDate = dateFormat.format(Date(task.dueDate))
+                        Text(
+                            text = "Due: $formattedDate",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isShadowMonarch) MonarchTextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
+                    if (task.repeatType != RepeatType.None) {
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isShadowMonarch) MonarchTextMuted else MaterialTheme.colorScheme.outline
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             Icon(
                                 imageVector = Icons.Rounded.Repeat,
                                 contentDescription = null,
-                                tint = Color(0xFFA855F7),
-                                modifier = Modifier.size(12.dp)
+                                tint = if (isShadowMonarch) MonarchTextSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Repeats: ${task.repeatType.name}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isShadowMonarch) MonarchTextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Text(
-                            text = "Repeats: ${task.repeatType.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isShadowMonarch) Color(0xFF94A3B8) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }
@@ -1356,7 +1510,7 @@ fun WeeklyDateSelector(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = if (isShadowMonarch) MonarchSpacing.Screen else 24.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1369,10 +1523,17 @@ fun WeeklyDateSelector(
             ) {
                 Text(
                     text = weekRangeText,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = if (isShadowMonarch) Color(0xFFF1F5F9) else MaterialTheme.colorScheme.onSurface
+                    style = if (isShadowMonarch) {
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    } else {
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    color = if (isShadowMonarch) MonarchTextPrimary else MaterialTheme.colorScheme.onSurface
                 )
                 if (selectedDate != today) {
                     TextButton(
@@ -1383,7 +1544,7 @@ fun WeeklyDateSelector(
                         Text(
                             text = "Today",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (isShadowMonarch) Color(0xFF00E5FF) else MaterialTheme.colorScheme.primary
+                            color = if (isShadowMonarch) MonarchPrimary else MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -1397,7 +1558,7 @@ fun WeeklyDateSelector(
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                         contentDescription = "Previous Week",
-                        tint = if (isShadowMonarch) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface
+                        tint = if (isShadowMonarch) MonarchPrimary else MaterialTheme.colorScheme.onSurface
                     )
                 }
                 IconButton(
@@ -1407,7 +1568,7 @@ fun WeeklyDateSelector(
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                         contentDescription = "Next Week",
-                        tint = if (isShadowMonarch) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onSurface
+                        tint = if (isShadowMonarch) MonarchPrimary else MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -1417,87 +1578,150 @@ fun WeeklyDateSelector(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (isShadowMonarch) 4.dp else 6.dp)
         ) {
             val dayFormatter = androidx.compose.runtime.remember { DateTimeFormatter.ofPattern("EEE", Locale.getDefault()) }
             weekDays.forEach { date ->
                 val isSelected = (date == selectedDate)
                 val isTodayDate = (date == today)
 
-                val dayScale by animateFloatAsState(
-                    targetValue = if (isSelected) 1.04f else 1.0f,
-                    animationSpec = MotionTokens.fastTween(),
-                    label = "DaySelectionScale"
-                )
+                if (isShadowMonarch) {
+                    val targetBgColor = if (isSelected) Color(0xFF292344) else Color(0xFF121620)
+                    val targetTextColor = if (isSelected) Color(0xFFF2F3F7) else Color(0xFF737B8E)
 
-                val backgroundColor = when {
-                    isSelected -> if (isShadowMonarch) Color.Unspecified else MaterialTheme.colorScheme.primary
-                    isTodayDate -> if (isShadowMonarch) Color(0xFF13172A) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                    else -> if (isShadowMonarch) Color(0xFF0E101A) else MaterialTheme.colorScheme.surface
-                }
+                    val animatedBgColor by androidx.compose.animation.animateColorAsState(
+                        targetValue = targetBgColor,
+                        animationSpec = tween(durationMillis = 180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        label = "MonarchDayBg"
+                    )
 
-                val contentColor = when {
-                    isSelected -> if (isShadowMonarch) Color(0xFF00E5FF) else MaterialTheme.colorScheme.onPrimary
-                    isTodayDate -> if (isShadowMonarch) Color(0xFF60A5FA) else MaterialTheme.colorScheme.primary
-                    else -> if (isShadowMonarch) Color(0xFF94A3B8) else MaterialTheme.colorScheme.onSurface
-                }
+                    val animatedTextColor by androidx.compose.animation.animateColorAsState(
+                        targetValue = targetTextColor,
+                        animationSpec = tween(durationMillis = 180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        label = "MonarchDayText"
+                    )
 
-                val borderStroke = when {
-                    isSelected -> if (isShadowMonarch) BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFFA855F7), Color(0xFF00E5FF)))) else null
-                    isTodayDate -> if (isShadowMonarch) BorderStroke(1.2.dp, Color(0xFF3B82F6)) else BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                    else -> if (isShadowMonarch) BorderStroke(1.dp, Color(0xFF1E243B)) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(58.dp)
+                            .pressScale(0.98f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(animatedBgColor)
+                            .then(
+                                if (isSelected) Modifier.border(BorderStroke(1.dp, Color(0xFF7967E8)), RoundedCornerShape(10.dp))
+                                else Modifier
+                            )
+                            .clickable { onDateSelected(date) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = date.format(dayFormatter).take(3).uppercase(),
+                                style = TextStyle(
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                                ),
+                                color = animatedTextColor
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${date.dayOfMonth}",
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = animatedTextColor
+                            )
+                            if (isTodayDate && !isSelected) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(4.dp)
+                                        .background(
+                                            color = Color(0xFF7967E8),
+                                            shape = CircleShape
+                                        )
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    val targetBgColor = when {
+                        isSelected -> MaterialTheme.colorScheme.primary
+                        isTodayDate -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                        else -> MaterialTheme.colorScheme.surface
+                    }
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .graphicsLayer(scaleX = dayScale, scaleY = dayScale)
-                        .pressScale(0.95f)
-                        .clip(RoundedCornerShape(14.dp))
-                        .then(
-                            if (isSelected && isShadowMonarch) {
-                                Modifier.background(
-                                    Brush.linearGradient(listOf(Color(0xFF2D1252), Color(0xFF0F172A)))
+                    val targetContentColor = when {
+                        isSelected -> MaterialTheme.colorScheme.onPrimary
+                        isTodayDate -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+
+                    val animatedBgColor by androidx.compose.animation.animateColorAsState(
+                        targetValue = targetBgColor,
+                        animationSpec = tween(durationMillis = 180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        label = "DayBgColor"
+                    )
+
+                    val animatedContentColor by androidx.compose.animation.animateColorAsState(
+                        targetValue = targetContentColor,
+                        animationSpec = tween(durationMillis = 180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        label = "DayContentColor"
+                    )
+
+                    val borderStroke = when {
+                        isSelected -> null
+                        isTodayDate -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .pressScale(0.98f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(animatedBgColor)
+                            .then(
+                                if (borderStroke != null) Modifier.border(borderStroke, RoundedCornerShape(14.dp))
+                                else Modifier
+                            )
+                            .clickable { onDateSelected(date) }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = date.format(dayFormatter).take(3),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (isSelected || isTodayDate) FontWeight.SemiBold else FontWeight.Normal,
+                                color = animatedContentColor
+                            )
+                            Text(
+                                text = "${date.dayOfMonth}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (isSelected || isTodayDate) FontWeight.Bold else FontWeight.SemiBold,
+                                color = animatedContentColor
+                            )
+                            if (isTodayDate && !isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(4.dp)
+                                        .background(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = CircleShape
+                                        )
                                 )
                             } else {
-                                Modifier.background(backgroundColor)
+                                Spacer(modifier = Modifier.height(4.dp))
                             }
-                        )
-                        .then(
-                            if (borderStroke != null) Modifier.border(borderStroke, RoundedCornerShape(14.dp))
-                            else Modifier
-                        )
-                        .clickable { onDateSelected(date) }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = date.format(dayFormatter).take(3),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (isSelected || isTodayDate) FontWeight.Bold else FontWeight.Medium,
-                            color = contentColor
-                        )
-                        Text(
-                            text = "${date.dayOfMonth}",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isSelected || isTodayDate) FontWeight.ExtraBold else FontWeight.SemiBold,
-                            color = contentColor
-                        )
-                        if (isTodayDate && !isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(4.dp)
-                                    .background(
-                                        color = if (isShadowMonarch) Color(0xFF00E5FF) else MaterialTheme.colorScheme.primary,
-                                        shape = androidx.compose.foundation.shape.CircleShape
-                                    )
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.height(4.dp))
                         }
                     }
                 }
@@ -1506,15 +1730,61 @@ fun WeeklyDateSelector(
     }
 }
 
+@Composable
+fun MonarchEmblem(
+    size: Dp = 32.dp,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+
+        val outerPath = Path().apply {
+            moveTo(w * 0.5f, 0f)
+            lineTo(w, h * 0.5f)
+            lineTo(w * 0.5f, h)
+            lineTo(0f, h * 0.5f)
+            close()
+        }
+        drawPath(
+            path = outerPath,
+            color = Color(0xFF7967E8),
+            style = Stroke(width = 2.dp.toPx())
+        )
+
+        val innerPath = Path().apply {
+            moveTo(w * 0.5f, h * 0.2f)
+            lineTo(w * 0.8f, h * 0.5f)
+            lineTo(w * 0.5f, h * 0.8f)
+            lineTo(w * 0.2f, h * 0.5f)
+            close()
+        }
+        drawPath(
+            path = innerPath,
+            color = Color(0xFF5687E8),
+            style = Fill
+        )
+
+        val centerPath = Path().apply {
+            moveTo(w * 0.5f, h * 0.35f)
+            lineTo(w * 0.65f, h * 0.5f)
+            lineTo(w * 0.5f, h * 0.65f)
+            lineTo(w * 0.35f, h * 0.5f)
+            close()
+        }
+        drawPath(
+            path = centerPath,
+            color = Color(0xFFF2F3F7),
+            style = Fill
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MonarchStatusHeader(
+fun MonarchHomeHeader(
     selectedDate: LocalDate,
-    completionPercentage: Int,
-    completedCount: Int,
-    totalCount: Int,
     streak: Int,
-    rank: String,
     isSearchActive: Boolean,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
@@ -1524,14 +1794,24 @@ fun MonarchStatusHeader(
     hasActiveFilters: Boolean
 ) {
     val dateString = androidx.compose.runtime.remember(selectedDate) {
-        selectedDate.format(DateTimeFormatter.ofPattern("EEEE, MMM d, yyyy", Locale.getDefault()))
+        selectedDate.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()))
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 40.dp, start = 20.dp, end = 20.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .height(68.dp)
+            .background(Color(0xFF090B10))
+            .drawBehind {
+                drawLine(
+                    color = Color(0xFF202638),
+                    start = Offset(0f, size.height),
+                    end = Offset(size.width, size.height),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center
     ) {
         if (!isSearchActive) {
             Row(
@@ -1540,232 +1820,110 @@ fun MonarchStatusHeader(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    MonarchLogo(
-                        size = 38.dp,
-                        showAura = true,
-                        isSelected = true
-                    )
+                    MonarchEmblem(size = 32.dp)
                     Column {
                         Text(
-                            text = "KISEKI MONARCH",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 1.2.sp
+                            text = "Kiseki",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-0.5).sp
                             ),
-                            color = Color(0xFFF1F5F9)
+                            color = Color(0xFFF2F3F7)
                         )
                         Text(
                             text = dateString,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontWeight = FontWeight.Medium
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Normal
                             ),
-                            color = Color(0xFF94A3B8)
+                            color = Color(0xFFA9B0C0)
                         )
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onSearchClick) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(
+                        onClick = onSearchClick,
+                        modifier = Modifier.pressScale(0.96f)
+                    ) {
                         Icon(
                             imageVector = Icons.Rounded.Search,
                             contentDescription = "Search tasks",
-                            tint = Color(0xFF00E5FF)
+                            tint = Color(0xFFF2F3F7)
                         )
                     }
-                    IconButton(onClick = onFilterClick) {
+                    IconButton(
+                        onClick = onFilterClick,
+                        modifier = Modifier.pressScale(0.96f)
+                    ) {
                         if (hasActiveFilters) {
-                            BadgedBox(badge = { Badge(containerColor = Color(0xFFA855F7)) }) {
+                            BadgedBox(badge = { Badge(containerColor = MonarchPrimary) }) {
                                 Icon(
                                     imageVector = Icons.Rounded.FilterList,
                                     contentDescription = "Filter and sort tasks",
-                                    tint = Color(0xFF00E5FF)
+                                    tint = MonarchPrimary
                                 )
                             }
                         } else {
                             Icon(
                                 imageVector = Icons.Rounded.FilterList,
                                 contentDescription = "Filter and sort tasks",
-                                tint = Color(0xFF94A3B8)
+                                tint = Color(0xFFA9B0C0)
                             )
                         }
                     }
-                }
-            }
-
-            // Compact Monarch Status Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(Color(0xFF131628), Color(0xFF0D0F1B))
-                        )
-                    )
-                    .border(
-                        BorderStroke(
-                            1.dp,
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color(0xFF8B5CF6).copy(alpha = 0.6f),
-                                    Color(0xFF00E5FF).copy(alpha = 0.6f)
-                                )
-                            )
-                        ),
-                        RoundedCornerShape(16.dp)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Rank Badge
                     Box(
                         modifier = Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                Brush.radialGradient(
-                                    colors = listOf(
-                                        Color(0xFF2E1065),
-                                        Color(0xFF0F172A)
-                                    )
-                                )
-                            )
+                            .clip(RoundedCornerShape(MonarchRadius.Control))
+                            .background(MonarchSurfaceSecondary)
                             .border(
-                                BorderStroke(
-                                    1.2.dp,
-                                    Brush.linearGradient(
-                                        colors = listOf(Color(0xFFA855F7), Color(0xFF00E5FF))
-                                    )
-                                ),
-                                RoundedCornerShape(12.dp)
-                            ),
+                                BorderStroke(1.dp, MonarchBorderSubtle),
+                                RoundedCornerShape(MonarchRadius.Control)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "RANK",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 8.sp,
-                                    letterSpacing = 1.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = Color(0xFF94A3B8)
-                            )
-                            Text(
-                                text = rank,
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 20.sp
-                                ),
-                                color = Color(0xFF00E5FF)
-                            )
-                        }
-                    }
-
-                    // Stats & Progress
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(
-                                text = "QUEST CLEARANCE",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.8.sp
-                                ),
-                                color = Color(0xFFE2E8F0)
+                            Icon(
+                                imageVector = Icons.Rounded.LocalFireDepartment,
+                                contentDescription = "Streak",
+                                tint = MonarchPrimary,
+                                modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "$completionPercentage%",
+                                text = "$streak",
                                 style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.ExtraBold
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
                                 ),
-                                color = Color(0xFF00E5FF)
+                                color = Color(0xFFF2F3F7)
                             )
-                        }
-
-                        // Progress Bar
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF1E243A))
-                        ) {
-                            val animatedProgress by animateFloatAsState(
-                                targetValue = completionPercentage / 100f,
-                                animationSpec = tween(500),
-                                label = "progress"
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(fraction = animatedProgress.coerceIn(0f, 1f))
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colors = listOf(Color(0xFF8B5CF6), Color(0xFF00E5FF))
-                                        )
-                                    )
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "$completedCount / $totalCount Quests",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF94A3B8)
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Star,
-                                    contentDescription = null,
-                                    tint = Color(0xFFA855F7),
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Text(
-                                    text = "$streak Days Streak",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color(0xFFA855F7)
-                                )
-                            }
                         }
                     }
                 }
             }
         } else {
-            // Search field
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search quests...", color = Color(0xFF64748B)) },
+                placeholder = { Text("Search tasks...", color = Color(0xFF737B8E)) },
                 singleLine = true,
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Rounded.Search,
                         contentDescription = null,
-                        tint = Color(0xFF00E5FF)
+                        tint = Color(0xFFA9B0C0)
                     )
                 },
                 trailingIcon = {
@@ -1775,35 +1933,484 @@ fun MonarchStatusHeader(
                                 Icon(
                                     imageVector = Icons.Rounded.Clear,
                                     contentDescription = "Clear search",
-                                    tint = Color(0xFF94A3B8)
+                                    tint = Color(0xFFA9B0C0)
                                 )
                             }
-                        }
-                        IconButton(onClick = onFilterClick) {
-                            Icon(
-                                imageVector = Icons.Rounded.FilterList,
-                                contentDescription = "Filter",
-                                tint = if (hasActiveFilters) Color(0xFFA855F7) else Color(0xFF94A3B8)
-                            )
                         }
                         IconButton(onClick = onCloseSearch) {
                             Icon(
                                 imageVector = Icons.Rounded.Close,
                                 contentDescription = "Close search",
-                                tint = Color(0xFF94A3B8)
+                                tint = Color(0xFFA9B0C0)
                             )
                         }
                     }
                 },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(MonarchRadius.Control),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF121528),
-                    unfocusedContainerColor = Color(0xFF121528),
-                    focusedBorderColor = Color(0xFF00E5FF),
-                    unfocusedBorderColor = Color(0xFF3B2D5A),
-                    focusedTextColor = Color(0xFFF1F5F9),
-                    unfocusedTextColor = Color(0xFFF1F5F9)
+                    focusedContainerColor = Color(0xFF121620),
+                    unfocusedContainerColor = Color(0xFF121620),
+                    focusedBorderColor = MonarchPrimary,
+                    unfocusedBorderColor = Color(0xFF283044),
+                    focusedTextColor = Color(0xFFF2F3F7),
+                    unfocusedTextColor = Color(0xFFF2F3F7)
                 )
+            )
+        }
+    }
+}
+
+@Composable
+fun MonarchDailyProgressPanel(
+    completedCount: Int,
+    totalCount: Int,
+    completionPercentage: Int,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF121620))
+            .border(
+                BorderStroke(1.dp, Color(0xFF283044)),
+                RoundedCornerShape(16.dp)
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Daily Progress",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = Color(0xFFA9B0C0)
+                )
+                Text(
+                    text = "$completionPercentage%",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = Color(0xFF7967E8)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0xFF202638))
+            ) {
+                val animatedProgress by animateFloatAsState(
+                    targetValue = completionPercentage / 100f,
+                    animationSpec = tween(MotionStandard),
+                    label = "monarch_daily_progress"
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction = animatedProgress.coerceIn(0f, 1f))
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(Color(0xFF7967E8), Color(0xFF5687E8))
+                            )
+                        )
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "$completedCount / $totalCount tasks completed",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    color = Color(0xFF737B8E)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MonarchSectionHeader(
+    title: String,
+    count: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(18.dp)
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(Color(0xFF7967E8))
+            )
+            Text(
+                text = title.uppercase(),
+                style = TextStyle(
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = Color(0xFFF2F3F7)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF1C2230))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "$count",
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = Color(0xFFF2F3F7)
+            )
+        }
+    }
+}
+
+@Composable
+fun MonarchCheckbox(
+    checked: Boolean,
+    onCheckedChange: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(22.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (checked) Color(0xFF7967E8) else Color.Transparent)
+            .border(
+                BorderStroke(1.5.dp, if (checked) Color(0xFF7967E8) else Color(0xFF737B8E)),
+                RoundedCornerShape(6.dp)
+            )
+            .clickable { onCheckedChange() },
+        contentAlignment = Alignment.Center
+    ) {
+        if (checked) {
+            Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun MonarchTaskCard(
+    task: ActivityTask,
+    categories: List<Category> = emptyList(),
+    groups: List<TaskGroup> = emptyList(),
+    onToggleComplete: (ActivityTask) -> Unit,
+    onDelete: (ActivityTask) -> Unit,
+    onEdit: (ActivityTask) -> Unit,
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier,
+    onRemoveFromGroup: (() -> Unit)? = null
+) {
+    var isPressed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    val priorityAccentColor = when (task.priority) {
+        Priority.High -> Color(0xFFD96772)
+        Priority.Medium -> Color(0xFFD7A953)
+        Priority.Low -> Color(0xFF6D879C)
+        else -> Color.Transparent
+    }
+
+    val animatedScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = tween(durationMillis = 100),
+        label = "MonarchCardScale"
+    )
+
+    val cardBgColor = if (isPressed) Color(0xFF171C28) else Color(0xFF121620)
+    val cardBorderColor = if (isPressed) Color(0xFF7967E8) else Color(0xFF283044)
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = animatedScale.coerceIn(0.96f, 1f)
+                scaleY = animatedScale.coerceIn(0.96f, 1f)
+            }
+            .clip(RoundedCornerShape(14.dp))
+            .background(cardBgColor)
+            .border(BorderStroke(1.dp, cardBorderColor), RoundedCornerShape(14.dp))
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        tryAwaitRelease()
+                        isPressed = false
+                    },
+                    onTap = { onClick() }
+                )
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(3.dp)
+                    .background(priorityAccentColor)
+            )
+
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(14.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MonarchCheckbox(
+                    checked = task.isCompleted,
+                    onCheckedChange = { onToggleComplete(task) }
+                )
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = task.title,
+                        style = TextStyle(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                        ),
+                        color = if (task.isCompleted) Color(0xFF737B8E) else Color(0xFFF2F3F7),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    val groupObj = if (!task.groupId.isNullOrBlank()) groups.find { it.id == task.groupId } else null
+                    val catObj = if (task.category.isNotBlank()) categories.find { it.name.equals(task.category, ignoreCase = true) } else null
+                    val hasGroup = groupObj != null || task.category.isNotBlank()
+                    val hasTime = task.dueDate != null || task.reminderTime != null
+                    val isRecurring = task.repeatType != RepeatType.None
+
+                    if (hasGroup || hasTime || isRecurring) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (groupObj != null) {
+                                val groupColor = parseGroupColor(groupObj.color)
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(groupColor)
+                                )
+                                Text(
+                                    text = groupObj.name,
+                                    style = TextStyle(fontSize = 12.sp),
+                                    color = if (task.isCompleted) Color(0xFF737B8E) else Color(0xFFA9B0C0),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            } else if (catObj != null || task.category.isNotBlank()) {
+                                val catColor = parseCategoryColor(catObj?.colorHex)
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(catColor)
+                                )
+                                Text(
+                                    text = task.category,
+                                    style = TextStyle(fontSize = 12.sp),
+                                    color = if (task.isCompleted) Color(0xFF737B8E) else Color(0xFFA9B0C0),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            if (hasGroup && hasTime) {
+                                Text(
+                                    text = "•",
+                                    style = TextStyle(fontSize = 12.sp),
+                                    color = Color(0xFF737B8E)
+                                )
+                            }
+
+                            if (hasTime) {
+                                val timeText = if (task.dueDate != null) {
+                                    SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(task.dueDate))
+                                } else if (task.reminderTime != null) {
+                                    SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(task.reminderTime))
+                                } else ""
+
+                                if (timeText.isNotBlank()) {
+                                    Text(
+                                        text = timeText,
+                                        style = TextStyle(fontSize = 12.sp),
+                                        color = if (task.isCompleted) Color(0xFF737B8E) else Color(0xFFA9B0C0)
+                                    )
+                                }
+                            }
+
+                            if (isRecurring) {
+                                if (hasGroup || hasTime) {
+                                    Text(
+                                        text = "•",
+                                        style = TextStyle(fontSize = 12.sp),
+                                        color = Color(0xFF737B8E)
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.Repeat,
+                                    contentDescription = "Recurring",
+                                    tint = if (task.isCompleted) Color(0xFF737B8E) else Color(0xFFA9B0C0),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    IconButton(
+                        onClick = { onEdit(task) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = "Edit Task",
+                            tint = Color(0xFFA9B0C0),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = { onDelete(task) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = "Delete Task",
+                            tint = Color(0xFFA9B0C0),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MonarchEmptyState(
+    onAddTaskClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 48.dp, horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Canvas(modifier = Modifier.size(48.dp)) {
+            val w = size.width
+            val h = size.height
+            val path = Path().apply {
+                moveTo(w * 0.5f, h * 0.15f)
+                lineTo(w * 0.85f, h * 0.5f)
+                lineTo(w * 0.5f, h * 0.85f)
+                lineTo(w * 0.15f, h * 0.5f)
+                close()
+            }
+            drawPath(
+                path = path,
+                color = Color(0xFF283044),
+                style = Stroke(width = 2.dp.toPx())
+            )
+            drawCircle(
+                color = Color(0xFF7967E8),
+                radius = 4.dp.toPx(),
+                center = Offset(w * 0.5f, h * 0.5f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "No objectives for this day",
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = Color(0xFFF2F3F7),
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = "Add a task when you are ready.",
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 14.sp
+            ),
+            color = Color(0xFFA9B0C0),
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Button(
+            onClick = onAddTaskClick,
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF7967E8),
+                contentColor = Color.White
+            ),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "Add Task",
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             )
         }
     }

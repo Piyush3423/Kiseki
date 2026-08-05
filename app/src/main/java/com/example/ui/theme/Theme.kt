@@ -13,25 +13,42 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import com.example.data.repository.ThemeMode
 
-private val ShadowMonarchColorScheme =
-  darkColorScheme(
-    primary = Color(0xFF8B5CF6),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFF231438),
-    onPrimaryContainer = Color(0xFFE9D5FF),
-    secondary = Color(0xFF3B82F6),
-    onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFF1E293B),
-    onSecondaryContainer = Color(0xFF93C5FD),
-    background = Color(0xFF07080D),
-    onBackground = Color(0xFFF1F5F9),
-    surface = Color(0xFF0E101A),
-    onSurface = Color(0xFFF1F5F9),
-    surfaceVariant = Color(0xFF181B2E),
-    onSurfaceVariant = Color(0xFF94A3B8),
-    outline = Color(0xFF334155),
-    outlineVariant = Color(0xFF1E293B)
-  )
+val MonarchColorScheme = darkColorScheme(
+    primary = MonarchPrimary,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF292344),
+    onPrimaryContainer = Color(0xFFDED8FF),
+
+    secondary = Color(0xFF8F99AE),
+    onSecondary = Color(0xFF10131A),
+    secondaryContainer = Color(0xFF222836),
+    onSecondaryContainer = Color(0xFFDCE1EC),
+
+    tertiary = MonarchBlue,
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFF1D304F),
+    onTertiaryContainer = Color(0xFFD7E5FF),
+
+    background = MonarchBackground,
+    onBackground = MonarchTextPrimary,
+
+    surface = MonarchSurface,
+    onSurface = MonarchTextPrimary,
+
+    surfaceVariant = MonarchSurfaceElevated,
+    onSurfaceVariant = MonarchTextSecondary,
+
+    outline = Color(0xFF3A4358),
+    outlineVariant = MonarchBorder,
+
+    error = MonarchError,
+    onError = Color.White,
+    errorContainer = Color(0xFF45252B),
+    onErrorContainer = Color(0xFFFFD9DD)
+)
+
+private val ShadowMonarchColorScheme = MonarchColorScheme
+
 
 private val DarkColorScheme =
   darkColorScheme(
