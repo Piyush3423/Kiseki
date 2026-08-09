@@ -58,7 +58,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.data.entity.ActivityTask
 import com.example.data.entity.TaskGroup
+import com.example.data.repository.ThemeMode
 import com.example.viewmodel.ActivityTaskViewModel
 
 val PRESET_GROUP_COLORS = listOf(
@@ -84,7 +93,8 @@ fun TaskGroupScreen(
     viewModel: ActivityTaskViewModel,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
-    onGroupClick: ((String) -> Unit)? = null
+    onGroupClick: ((String) -> Unit)? = null,
+    themeMode: ThemeMode = ThemeMode.SYSTEM
 ) {
     val groups by viewModel.allGroups.collectAsStateWithLifecycle()
     val allTasks by viewModel.allTasks.collectAsStateWithLifecycle()
@@ -113,25 +123,41 @@ fun TaskGroupScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
+                    containerColor = if (themeMode == ThemeMode.SHADOW_MONARCH) Color(0xFF0D1017) else MaterialTheme.colorScheme.background,
+                    titleContentColor = if (themeMode == ThemeMode.SHADOW_MONARCH) Color(0xFFF2F3F7) else MaterialTheme.colorScheme.onBackground
                 )
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showCreateDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Add,
-                    contentDescription = "Add Task Group"
-                )
+            if (themeMode == ThemeMode.SHADOW_MONARCH) {
+                FloatingActionButton(
+                    onClick = { showCreateDialog = true },
+                    modifier = Modifier.size(54.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    containerColor = Color(0xFF7967E8),
+                    contentColor = Color.White
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = "Add Task Group",
+                        tint = Color.White
+                    )
+                }
+            } else {
+                FloatingActionButton(
+                    onClick = { showCreateDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = "Add Task Group"
+                    )
+                }
             }
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = if (themeMode == ThemeMode.SHADOW_MONARCH) Color(0xFF0D1017) else MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -139,62 +165,68 @@ fun TaskGroupScreen(
                 .padding(innerPadding)
         ) {
             if (groups.isEmpty()) {
-                // Empty state
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Surface(
-                        modifier = Modifier.size(80.dp),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                if (themeMode == ThemeMode.SHADOW_MONARCH) {
+                    com.example.ui.home.MonarchEmptyState(
+                        onAddTaskClick = { showCreateDialog = true }
+                    )
+                } else {
+                    // Empty state
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.FolderOpen,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(40.dp)
-                            )
+                        Surface(
+                            modifier = Modifier.size(80.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.FolderOpen,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
-                    Text(
-                        text = "No Task Groups Yet",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Create groups to organize and structure your tasks effortlessly.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = { showCreateDialog = true },
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                        Text(
+                            text = "No Task Groups Yet",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Create Task Group")
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Create groups to organize and structure your tasks effortlessly.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Button(
+                            onClick = { showCreateDialog = true },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Create Task Group")
+                        }
                     }
                 }
             } else {
@@ -204,26 +236,36 @@ fun TaskGroupScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
-                        Text(
-                            text = "${groups.size} ${if (groups.size == 1) "Group" else "Groups"}",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
+                        if (themeMode == ThemeMode.SHADOW_MONARCH) {
+                            com.example.ui.home.MonarchSectionHeader(
+                                title = "TASK GROUPS",
+                                count = groups.size
+                            )
+                        } else {
+                            Text(
+                                text = "${groups.size} ${if (groups.size == 1) "Group" else "Groups"}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                        }
                     }
 
                     items(
                         items = groups,
                         key = { it.id }
                     ) { group ->
-                        val count = allTasks.count { it.groupId == group.id }
+                        val tasksInGroup = allTasks.filter { it.groupId == group.id }
                         TaskGroupCard(
                             group = group,
-                            taskCount = count,
+                            taskCount = tasksInGroup.size,
+                            tasksInGroup = tasksInGroup,
                             onClick = if (onGroupClick != null) { { onGroupClick(group.id) } } else null,
                             onEdit = { groupToEdit = group },
-                            onDelete = { groupToDelete = group }
+                            onDelete = { groupToDelete = group },
+                            onToggleTaskComplete = { task -> viewModel.updateTask(task.copy(isCompleted = !task.isCompleted)) },
+                            themeMode = themeMode
                         )
                     }
                 }
@@ -314,82 +356,264 @@ fun TaskGroupScreen(
 fun TaskGroupCard(
     group: TaskGroup,
     taskCount: Int = 0,
+    tasksInGroup: List<ActivityTask> = emptyList(),
     onClick: (() -> Unit)? = null,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onToggleTaskComplete: ((ActivityTask) -> Unit)? = null,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
     modifier: Modifier = Modifier
 ) {
-    val color = parseGroupColor(group.color)
+    if (themeMode == ThemeMode.SHADOW_MONARCH) {
+        MonarchTaskGroupPanel(
+            group = group,
+            tasksInGroup = tasksInGroup,
+            onGroupClick = onClick,
+            onEditGroup = onEdit,
+            onDeleteGroup = onDelete,
+            onToggleTaskComplete = onToggleTaskComplete,
+            modifier = modifier
+        )
+    } else {
+        val color = parseGroupColor(group.color)
 
-    Card(
+        Card(
+            modifier = modifier
+                .fillMaxWidth()
+                .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .border(1.dp, color.copy(alpha = 0.5f), CircleShape)
+                    )
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Column {
+                        Text(
+                            text = group.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (taskCount == 1) "1 task" else "$taskCount tasks",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = "Edit group",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = "Delete group",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MonarchTaskGroupPanel(
+    group: TaskGroup,
+    tasksInGroup: List<ActivityTask>,
+    onGroupClick: (() -> Unit)? = null,
+    onEditGroup: () -> Unit,
+    onDeleteGroup: () -> Unit,
+    onToggleTaskComplete: ((ActivityTask) -> Unit)? = null,
+    onTaskClick: ((String) -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    val completedCount = tasksInGroup.count { it.isCompleted }
+    val totalCount = tasksInGroup.size
+    val groupColor = parseGroupColor(group.color)
+
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF171C28))
+            .border(BorderStroke(1.dp, Color(0xFF283044)), RoundedCornerShape(14.dp))
+            .padding(14.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .clickable {
+                    if (onGroupClick != null) {
+                        onGroupClick()
+                    } else {
+                        isExpanded = !isExpanded
+                    }
+                },
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .background(color)
-                        .border(1.dp, color.copy(alpha = 0.5f), CircleShape)
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(groupColor)
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = group.name.uppercase(),
+                    style = TextStyle(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = Color(0xFFF2F3F7)
                 )
-
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Column {
-                    Text(
-                        text = group.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (taskCount == 1) "1 task" else "$taskCount tasks",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = if (totalCount == 0) "No tasks" else "$completedCount of $totalCount completed",
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    color = Color(0xFF737B8E)
+                )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Edit,
-                        contentDescription = "Edit group",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+            Text(
+                text = "$completedCount/$totalCount",
+                style = TextStyle(
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = Color(0xFFF2F3F7)
+            )
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(36.dp)
+            Spacer(modifier = Modifier.width(6.dp))
+
+            IconButton(
+                onClick = { isExpanded = !isExpanded },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = if (isExpanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Collapse group" else "Expand group",
+                    tint = Color(0xFF737B8E),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            IconButton(
+                onClick = onEditGroup,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Edit,
+                    contentDescription = "Edit group",
+                    tint = Color(0xFF737B8E),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            IconButton(
+                onClick = onDeleteGroup,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Delete,
+                    contentDescription = "Delete group",
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        if (isExpanded && tasksInGroup.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .padding(start = 3.dp, top = 2.dp, bottom = 2.dp)
+                        .width(2.dp)
+                        .fillMaxHeight()
+                        .background(Color(0xFF283044))
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Delete,
-                        contentDescription = "Delete group",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    tasksInGroup.forEach { task ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF121620))
+                                .border(BorderStroke(1.dp, Color(0xFF283044)), RoundedCornerShape(10.dp))
+                                .clickable {
+                                    if (onTaskClick != null) onTaskClick(task.id)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            com.example.ui.home.MonarchCheckbox(
+                                checked = task.isCompleted,
+                                onCheckedChange = {
+                                    if (onToggleTaskComplete != null) onToggleTaskComplete(task)
+                                }
+                            )
+                            Text(
+                                text = task.title,
+                                style = TextStyle(
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                                ),
+                                color = if (task.isCompleted) Color(0xFF737B8E) else Color(0xFFF2F3F7),
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
         }
