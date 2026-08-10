@@ -77,8 +77,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -142,8 +146,12 @@ fun HomeScreen(
     val isShadowMonarch = themeMode == ThemeMode.SHADOW_MONARCH
 
     val tasks by viewModel.allTasks.collectAsStateWithLifecycle()
+    val allDailyScores by viewModel.allDailyScores.collectAsStateWithLifecycle()
     val dbCategories by viewModel.allCategories.collectAsStateWithLifecycle()
     val dbGroups by viewModel.allGroups.collectAsStateWithLifecycle()
+    val levelInfo by viewModel.levelInfo.collectAsStateWithLifecycle()
+    val momentumInfo by viewModel.momentumInfo.collectAsStateWithLifecycle()
+    val xpToastAmount by viewModel.xpToastAmount.collectAsStateWithLifecycle()
 
     var isSearchActive by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var searchQuery by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
@@ -295,6 +303,7 @@ fun HomeScreen(
         else -> "E"
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     androidx.compose.material3.Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = Color.Transparent,
@@ -361,8 +370,13 @@ fun HomeScreen(
                     completedCount = completedSelectedDateTasks,
                     totalCount = totalSelectedDateTasks,
                     completionPercentage = completionPercentage,
+                    dailyScore = allDailyScores.find { it.date == selectedDate.toString() }?.score ?: 0,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                HomeLevelIndicator(levelInfo = levelInfo, momentumInfo = momentumInfo, isShadowMonarch = true)
 
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -665,6 +679,8 @@ fun HomeScreen(
                 }
 
                 // Active Filter Chips Row
+                HomeLevelIndicator(levelInfo = levelInfo, momentumInfo = momentumInfo, isShadowMonarch = false)
+
                 if (hasActiveFilters) {
                     Row(
                         modifier = Modifier
@@ -786,6 +802,12 @@ fun HomeScreen(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            val scoreForSelectedDate = allDailyScores.find { it.date == selectedDate.toString() }
+            if (scoreForSelectedDate != null && (totalSelectedDateTasks > 0 || scoreForSelectedDate.score > 0)) {
+                com.example.ui.components.DailyScoreCard(score = scoreForSelectedDate, selectedDate = selectedDate, today = today)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // Main Content
             if (filteredTasks.isEmpty()) {
@@ -1027,7 +1049,13 @@ fun HomeScreen(
                 onDismissRequest = { showManageCategoriesDialog = false }
             )
         }
+
+        XpToastOverlay(
+            xpAmount = xpToastAmount,
+            onDismiss = { viewModel.clearXpToast() }
+        )
     }
+}
 }
 
 enum class SortOption(val displayName: String) {
@@ -1965,8 +1993,22 @@ fun MonarchDailyProgressPanel(
     completedCount: Int,
     totalCount: Int,
     completionPercentage: Int,
+    dailyScore: Int = 0,
     modifier: Modifier = Modifier
 ) {
+    val rank = remember(dailyScore) { com.example.domain.dailyScoreToRank(dailyScore) }
+    val rankScale = remember { androidx.compose.animation.core.Animatable(1f) }
+
+    LaunchedEffect(rank, dailyScore) {
+        if (rank == "S") {
+            rankScale.snapTo(0.9f)
+            rankScale.animateTo(1.06f, tween(250))
+            rankScale.animateTo(1.0f, tween(150))
+        } else {
+            rankScale.snapTo(1f)
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -1994,14 +2036,46 @@ fun MonarchDailyProgressPanel(
                     ),
                     color = Color(0xFFA9B0C0)
                 )
-                Text(
-                    text = "$completionPercentage%",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = Color(0xFF7967E8)
-                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "DAILY RANK",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Color(0xFFA9B0C0)
+                        )
+                        Text(
+                            text = rank,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = if (rank == "S") Color(0xFF7967E8) else Color(0xFFF2F3F7),
+                            modifier = Modifier.graphicsLayer {
+                                scaleX = rankScale.value
+                                scaleY = rankScale.value
+                            }
+                        )
+                    }
+
+                    Text(
+                        text = "$completionPercentage%",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = Color(0xFF7967E8)
+                    )
+                }
             }
 
             Box(
@@ -2412,6 +2486,214 @@ fun MonarchEmptyState(
                 text = "Add Task",
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             )
+        }
+    }
+}
+
+@Composable
+fun HomeMomentumBadge(
+    momentumInfo: com.example.domain.MomentumResult,
+    isShadowMonarch: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    if (!momentumInfo.hasEnoughHistory) return
+
+    val arrowStr = when (momentumInfo.trend) {
+        com.example.domain.MomentumTrend.IMPROVING -> "↑"
+        com.example.domain.MomentumTrend.STABLE -> "→"
+        com.example.domain.MomentumTrend.DECLINING -> "↓"
+    }
+
+    val arrowColor = when (momentumInfo.trend) {
+        com.example.domain.MomentumTrend.IMPROVING -> Color(0xFF4CAF50)
+        com.example.domain.MomentumTrend.STABLE -> if (isShadowMonarch) Color(0xFFA9B0C0) else MaterialTheme.colorScheme.onSurfaceVariant
+        com.example.domain.MomentumTrend.DECLINING -> Color(0xFFE53935)
+    }
+
+    androidx.compose.material3.Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+        color = if (isShadowMonarch) Color(0xFF1E2433) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = BorderStroke(
+            1.dp,
+            if (isShadowMonarch) Color(0xFF283044) else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Momentum ${momentumInfo.currentMomentum}%",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp
+                ),
+                color = if (isShadowMonarch) Color(0xFFF2F3F7) else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = arrowStr,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                ),
+                color = arrowColor
+            )
+        }
+    }
+}
+
+@Composable
+fun HomeLevelIndicator(
+    levelInfo: com.example.domain.LevelInfo,
+    momentumInfo: com.example.domain.MomentumResult? = null,
+    modifier: Modifier = Modifier,
+    isShadowMonarch: Boolean = false
+) {
+    androidx.compose.material3.Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = if (isShadowMonarch) MonarchSurfaceSecondary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        border = if (isShadowMonarch) BorderStroke(1.dp, MonarchBorderSubtle) else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                if (isShadowMonarch) Color(0xFF7967E8) else MaterialTheme.colorScheme.primary,
+                                if (isShadowMonarch) Color(0xFF9182F3) else MaterialTheme.colorScheme.secondary
+                            )
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = "LV. ${levelInfo.level}",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    ),
+                    color = Color.White
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Level Progress",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 10.sp
+                        ),
+                        color = if (isShadowMonarch) MonarchTextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${levelInfo.currentLevelXp} / ${levelInfo.requiredXpForNextLevel} XP",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        ),
+                        color = if (isShadowMonarch) MonarchTextPrimary else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                LinearProgressIndicator(
+                    progress = { levelInfo.progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = if (isShadowMonarch) Color(0xFF7967E8) else MaterialTheme.colorScheme.primary,
+                    trackColor = if (isShadowMonarch) Color(0xFF282E3E) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                )
+            }
+
+            if (momentumInfo != null && momentumInfo.hasEnoughHistory) {
+                HomeMomentumBadge(
+                    momentumInfo = momentumInfo,
+                    isShadowMonarch = isShadowMonarch
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun XpToastOverlay(
+    xpAmount: Int?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    AnimatedVisibility(
+        visible = xpAmount != null,
+        enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = tween(200)),
+        exit = fadeOut(animationSpec = tween(300)) + shrinkVertically(animationSpec = tween(300)),
+        modifier = modifier
+    ) {
+        if (xpAmount != null) {
+            val offsetY = remember { androidx.compose.animation.core.Animatable(0f) }
+            val alpha = remember { androidx.compose.animation.core.Animatable(1f) }
+
+            LaunchedEffect(xpAmount) {
+                offsetY.animateTo(-30f, animationSpec = tween(durationMillis = 700))
+                alpha.animateTo(0f, animationSpec = tween(durationMillis = 200))
+                onDismiss()
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 80.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier
+                        .graphicsLayer {
+                            this.translationY = offsetY.value * density.density
+                            this.alpha = alpha.value
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFF1E293B),
+                    shadowElevation = 8.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "+$xpAmount XP",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            ),
+                            color = Color.White
+                        )
+                    }
+                }
+            }
         }
     }
 }

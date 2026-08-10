@@ -36,11 +36,14 @@ import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.PendingActions
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Whatshot
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,8 +59,26 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.viewmodel.ActivityTaskViewModel
 
+import com.example.data.entity.DailyScore
 import com.example.data.repository.ThemeMode
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.example.data.entity.ActivityTask
+import com.example.data.entity.XpEvent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 
 private data class DailyCompletion(
     val date: LocalDate,
@@ -93,7 +114,8 @@ private fun getRankForStreak(streak: Int): String {
 fun AnalyticsScreen(
     viewModel: ActivityTaskViewModel,
     modifier: Modifier = Modifier,
-    themeMode: ThemeMode = ThemeMode.SYSTEM
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onNavigateToHistory: (() -> Unit)? = null
 ) {
     val isShadowMonarch = themeMode == ThemeMode.SHADOW_MONARCH
     val cardBorder = if (isShadowMonarch) {
@@ -102,6 +124,13 @@ fun AnalyticsScreen(
         BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
     }
     val tasks by viewModel.allTasks.collectAsStateWithLifecycle()
+    val allDailyScores by viewModel.allDailyScores.collectAsStateWithLifecycle()
+    val momentumInfo by viewModel.momentumInfo.collectAsStateWithLifecycle()
+    val allPersonalBests by viewModel.allPersonalBests.collectAsStateWithLifecycle()
+    val levelInfo by viewModel.levelInfo.collectAsStateWithLifecycle()
+    val xpThisWeek by viewModel.xpThisWeek.collectAsStateWithLifecycle()
+    val xpThisMonth by viewModel.xpThisMonth.collectAsStateWithLifecycle()
+    val allXpEvents by viewModel.allXpEvents.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val zoneId = remember { ZoneId.systemDefault() }
 
@@ -292,6 +321,15 @@ fun AnalyticsScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Personal Level & XP Card
+                PersonalXpCard(
+                    levelInfo = levelInfo,
+                    xpThisWeek = xpThisWeek,
+                    xpThisMonth = xpThisMonth,
+                    cardBorder = cardBorder,
+                    isShadowMonarch = isShadowMonarch
+                )
+
                 // Today's Progress Hero Card
                 Card(
                     modifier = Modifier
@@ -351,6 +389,37 @@ fun AnalyticsScreen(
 
                 // 7-Day Completion Bar Chart Card
                 SevenDayCompletionChart(dailyCompletions = analyticsData.dailyCompletions)
+
+                // Momentum Analytics Card
+                MomentumAnalyticsCard(
+                    momentumInfo = momentumInfo,
+                    cardBorder = cardBorder,
+                    isShadowMonarch = isShadowMonarch
+                )
+
+                // Daily Rank Analytics Card
+                DailyRankAnalyticsCard(
+                    allDailyScores = allDailyScores,
+                    cardBorder = cardBorder,
+                    isShadowMonarch = isShadowMonarch
+                )
+
+                // Activity Heatmap Card
+                ActivityHeatmapCard(
+                    tasks = tasks,
+                    allDailyScores = allDailyScores,
+                    allXpEvents = allXpEvents,
+                    cardBorder = cardBorder,
+                    isShadowMonarch = isShadowMonarch,
+                    onNavigateToHistory = onNavigateToHistory
+                )
+
+                // Personal Bests Analytics Card
+                PersonalBestsAnalyticsCard(
+                    personalBests = allPersonalBests,
+                    cardBorder = cardBorder,
+                    isShadowMonarch = isShadowMonarch
+                )
 
                 // Grid Stats Section
                 Row(
@@ -677,6 +746,1345 @@ private fun MetricTile(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+@Composable
+fun PersonalXpCard(
+    levelInfo: com.example.domain.LevelInfo,
+    xpThisWeek: Int,
+    xpThisMonth: Int,
+    cardBorder: BorderStroke,
+    isShadowMonarch: Boolean
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(cardBorder, RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Star,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Level & Progress",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Personal XP",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.secondary
+                                )
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "LV. ${levelInfo.level}",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        color = Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Level Progress Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Next Level Progress",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${levelInfo.currentLevelXp} / ${levelInfo.requiredXpForNextLevel} XP",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            LinearProgressIndicator(
+                progress = { levelInfo.progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Grid of XP Stats
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                XpStatItem(
+                    label = "Total XP",
+                    value = "${levelInfo.totalXp}",
+                    modifier = Modifier.weight(1f)
+                )
+                XpStatItem(
+                    label = "This Week",
+                    value = "+$xpThisWeek",
+                    modifier = Modifier.weight(1f)
+                )
+                XpStatItem(
+                    label = "This Month",
+                    value = "+$xpThisMonth",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun XpStatItem(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun DailyRankAnalyticsCard(
+    allDailyScores: List<DailyScore>,
+    cardBorder: BorderStroke,
+    isShadowMonarch: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val rankCounts = remember(allDailyScores) {
+        val counts = mutableMapOf("S" to 0, "A" to 0, "B" to 0, "C" to 0, "D" to 0, "E" to 0)
+        allDailyScores.forEach { scoreObj ->
+            val rank = com.example.domain.dailyScoreToRank(scoreObj.score)
+            counts[rank] = (counts[rank] ?: 0) + 1
+        }
+        counts
+    }
+
+    val sRankDays = rankCounts["S"] ?: 0
+    val aRankDays = rankCounts["A"] ?: 0
+
+    val maxCount = remember(rankCounts) {
+        (rankCounts.values.maxOrNull() ?: 0).coerceAtLeast(1)
+    }
+
+    val mostCommonRank = remember(rankCounts, allDailyScores) {
+        if (allDailyScores.isNotEmpty()) {
+            val maxVal = rankCounts.values.maxOrNull() ?: 0
+            if (maxVal > 0) {
+                rankCounts.entries.firstOrNull { it.value == maxVal }?.key ?: "-"
+            } else "-"
+        } else "-"
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(cardBorder, RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Daily Rank Distribution",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Ranks earned from daily scores",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "${allDailyScores.size} Days Tracked",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RankStatTile(
+                    label = "S Rank Days",
+                    value = "$sRankDays",
+                    modifier = Modifier.weight(1f)
+                )
+                RankStatTile(
+                    label = "A Rank Days",
+                    value = "$aRankDays",
+                    modifier = Modifier.weight(1f)
+                )
+                RankStatTile(
+                    label = "Most Common Rank",
+                    value = mostCommonRank,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            val ranksOrder = listOf("S", "A", "B", "C", "D", "E")
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ranksOrder.forEach { rankKey ->
+                    val count = rankCounts[rankKey] ?: 0
+                    val fraction = (count.toFloat() / maxCount.toFloat()).coerceIn(0f, 1f)
+                    val animatedFraction by animateFloatAsState(
+                        targetValue = fraction,
+                        animationSpec = tween(durationMillis = 500),
+                        label = "RankBarAnimation_$rankKey"
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = rankKey,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = if (rankKey == "S") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.width(28.dp)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(16.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        ) {
+                            if (animatedFraction > 0f) {
+                                val barColor = when (rankKey) {
+                                    "S" -> MaterialTheme.colorScheme.primary
+                                    "A" -> MaterialTheme.colorScheme.secondary
+                                    "B" -> MaterialTheme.colorScheme.tertiary
+                                    else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(fraction = animatedFraction)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(barColor)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Text(
+                            text = "$count",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(24.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RankStatTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun PersonalBestsAnalyticsCard(
+    personalBests: List<com.example.data.entity.PersonalBest>,
+    cardBorder: BorderStroke,
+    isShadowMonarch: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val pbMap = remember(personalBests) {
+        personalBests.associateBy { it.recordKey }
+    }
+
+    val highestScore = pbMap[com.example.domain.PersonalBestEvaluator.KEY_HIGHEST_SCORE]?.value ?: 0
+    val mostTasks = pbMap[com.example.domain.PersonalBestEvaluator.KEY_MOST_TASKS]?.value ?: 0
+    val bestXp = pbMap[com.example.domain.PersonalBestEvaluator.KEY_MOST_XP]?.value ?: 0
+    val longestStreak = pbMap[com.example.domain.PersonalBestEvaluator.KEY_LONGEST_STREAK]?.value ?: 0
+    val mostHp = pbMap[com.example.domain.PersonalBestEvaluator.KEY_MOST_HIGH_PRIORITY]?.value ?: 0
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(cardBorder, RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.EmojiEvents,
+                            contentDescription = "Personal Bests",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Personal Bests",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "All-time productivity records",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                PersonalBestTile(
+                    title = "Highest Daily Score",
+                    value = if (highestScore > 0) "$highestScore" else "--",
+                    modifier = Modifier.weight(1f)
+                )
+                PersonalBestTile(
+                    title = "Most Tasks",
+                    value = if (mostTasks > 0) "$mostTasks" else "--",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                PersonalBestTile(
+                    title = "Best XP Day",
+                    value = if (bestXp > 0) "$bestXp XP" else "--",
+                    modifier = Modifier.weight(1f)
+                )
+                PersonalBestTile(
+                    title = "Longest Streak",
+                    value = if (longestStreak > 0) "$longestStreak days" else "--",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            PersonalBestTile(
+                title = "Most High Priority Completed",
+                value = if (mostHp > 0) "$mostHp" else "--",
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun PersonalBestTile(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 16.sp
+                ),
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
+fun MomentumAnalyticsCard(
+    momentumInfo: com.example.domain.MomentumResult,
+    cardBorder: BorderStroke,
+    isShadowMonarch: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val trendArrow = when (momentumInfo.trend) {
+        com.example.domain.MomentumTrend.IMPROVING -> "↑"
+        com.example.domain.MomentumTrend.STABLE -> "→"
+        com.example.domain.MomentumTrend.DECLINING -> "↓"
+    }
+
+    val trendText = when (momentumInfo.trend) {
+        com.example.domain.MomentumTrend.IMPROVING -> "improving"
+        com.example.domain.MomentumTrend.STABLE -> "stable"
+        com.example.domain.MomentumTrend.DECLINING -> "declining"
+    }
+
+    val trendColor = when (momentumInfo.trend) {
+        com.example.domain.MomentumTrend.IMPROVING -> Color(0xFF34A853)
+        com.example.domain.MomentumTrend.STABLE -> if (isShadowMonarch) Color(0xFFA9B0C0) else MaterialTheme.colorScheme.onSurfaceVariant
+        com.example.domain.MomentumTrend.DECLINING -> Color(0xFFEA4335)
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(cardBorder, RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Momentum",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "14-day consistency weighted model",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (momentumInfo.hasEnoughHistory) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = trendColor.copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, trendColor.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "$trendArrow $trendText",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = trendColor
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (!momentumInfo.hasEnoughHistory) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Need more history to compute momentum",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isShadowMonarch) Color(0xFF161B26) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(
+                                text = "Current Momentum",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${momentumInfo.currentMomentum}%",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isShadowMonarch) Color(0xFF161B26) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(
+                                text = "Last week",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${momentumInfo.lastWeekMomentum}%",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isShadowMonarch) Color(0xFF161B26) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(
+                                text = "Change",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            val changeText = if (momentumInfo.change >= 0) "+${momentumInfo.change}%" else "${momentumInfo.change}%"
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = changeText,
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = trendColor
+                                )
+                                Text(
+                                    text = " $trendArrow",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = trendColor
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Text(
+                    text = "14-Day Trend",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                FourteenDayMomentumGraph(
+                    history = momentumInfo.dailyMomentumHistory,
+                    isShadowMonarch = isShadowMonarch
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FourteenDayMomentumGraph(
+    history: List<Pair<String, Int>>,
+    isShadowMonarch: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    if (history.isEmpty()) return
+
+    val primaryColor = if (isShadowMonarch) Color(0xFF7967E8) else MaterialTheme.colorScheme.primary
+    val gridColor = if (isShadowMonarch) Color(0xFF283044) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(110.dp)
+                .padding(vertical = 8.dp)
+        ) {
+            val width = size.width
+            val height = size.height
+            val numPoints = history.size
+            if (numPoints < 2) return@Canvas
+
+            val stepX = width / (numPoints - 1)
+
+            listOf(0f, 0.5f, 1f).forEach { fraction ->
+                val y = height * (1f - fraction)
+                drawLine(
+                    color = gridColor,
+                    start = Offset(0f, y),
+                    end = Offset(width, y),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+
+            val points = history.mapIndexed { index, pair ->
+                val x = index * stepX
+                val normVal = (pair.second / 100f).coerceIn(0f, 1f)
+                val y = height * (1f - normVal)
+                Offset(x, y)
+            }
+
+            val path = Path().apply {
+                moveTo(points[0].x, points[0].y)
+                for (i in 1 until points.size) {
+                    val pPrev = points[i - 1]
+                    val pCurr = points[i]
+                    val controlX1 = pPrev.x + (pCurr.x - pPrev.x) / 2f
+                    val controlY1 = pPrev.y
+                    val controlX2 = pPrev.x + (pCurr.x - pPrev.x) / 2f
+                    val controlY2 = pCurr.y
+                    cubicTo(controlX1, controlY1, controlX2, controlY2, pCurr.x, pCurr.y)
+                }
+            }
+
+            val fillPath = Path().apply {
+                addPath(path)
+                lineTo(points.last().x, height)
+                lineTo(points.first().x, height)
+                close()
+            }
+
+            drawPath(
+                path = fillPath,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        primaryColor.copy(alpha = 0.35f),
+                        primaryColor.copy(alpha = 0.02f)
+                    )
+                )
+            )
+
+            drawPath(
+                path = path,
+                color = primaryColor,
+                style = Stroke(width = 2.5.dp.toPx())
+            )
+
+            points.forEachIndexed { index, pt ->
+                val isToday = index == points.size - 1
+                drawCircle(
+                    color = primaryColor,
+                    radius = if (isToday) 4.dp.toPx() else 2.5.dp.toPx(),
+                    center = pt
+                )
+                if (isToday) {
+                    drawCircle(
+                        color = Color.White,
+                        radius = 2.dp.toPx(),
+                        center = pt
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val firstDate = history.firstOrNull()?.first ?: ""
+            val midDate = history.getOrNull(history.size / 2)?.first ?: ""
+            val lastDate = history.lastOrNull()?.first ?: ""
+
+            Text(
+                text = formatShortDate(firstDate),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = labelColor
+            )
+            Text(
+                text = formatShortDate(midDate),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = labelColor
+            )
+            Text(
+                text = "Today (${formatShortDate(lastDate)})",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                color = labelColor
+            )
+        }
+    }
+}
+
+private fun formatShortDate(dateStr: String): String {
+    if (dateStr.isBlank()) return ""
+    return try {
+        val parsed = LocalDate.parse(dateStr)
+        val formatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
+        parsed.format(formatter)
+    } catch (e: Exception) {
+        dateStr
+    }
+}
+
+enum class HeatmapRange(val label: String, val days: Int) {
+    THREE_MONTHS("3 Months", 90),
+    SIX_MONTHS("6 Months", 180),
+    ONE_YEAR("1 Year", 365)
+}
+
+data class HeatmapDayData(
+    val date: LocalDate,
+    val score: Int,
+    val rank: String,
+    val completedTasks: Int,
+    val totalTasks: Int,
+    val xpEarned: Int
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ActivityHeatmapCard(
+    tasks: List<ActivityTask>,
+    allDailyScores: List<DailyScore>,
+    allXpEvents: List<XpEvent>,
+    cardBorder: BorderStroke,
+    isShadowMonarch: Boolean = false,
+    onNavigateToHistory: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    var selectedRange by remember { mutableStateOf(HeatmapRange.THREE_MONTHS) }
+    val today = remember { LocalDate.now() }
+    val zoneId = remember { ZoneId.systemDefault() }
+
+    var selectedDayData by remember { mutableStateOf<HeatmapDayData?>(null) }
+
+    val dayDataMap = remember(tasks, allDailyScores, allXpEvents, today, zoneId, selectedRange) {
+        val startDate = today.minusDays((selectedRange.days - 1).toLong())
+        val scoresMap = allDailyScores.associateBy { it.date }
+        val computedScoresMap = com.example.domain.DailyScoreCalculator.calculateAllScores(tasks).associateBy { it.date }
+
+        val xpByDate = mutableMapOf<String, Int>()
+        allXpEvents.forEach { event ->
+            val dateStr = Instant.ofEpochMilli(event.timestamp).atZone(zoneId).toLocalDate().toString()
+            xpByDate[dateStr] = (xpByDate[dateStr] ?: 0) + event.amount
+        }
+
+        val completedByDate = mutableMapOf<String, Int>()
+        tasks.forEach { task ->
+            if (task.isCompleted && task.completedAt != null) {
+                val cDateStr = Instant.ofEpochMilli(task.completedAt).atZone(zoneId).toLocalDate().toString()
+                completedByDate[cDateStr] = (completedByDate[cDateStr] ?: 0) + 1
+            }
+        }
+
+        val scheduledByDate = mutableMapOf<String, Int>()
+        tasks.forEach { task ->
+            val sDateStr = if (task.dueDate != null) {
+                Instant.ofEpochMilli(task.dueDate).atZone(zoneId).toLocalDate().toString()
+            } else {
+                Instant.ofEpochMilli(task.createdAt).atZone(zoneId).toLocalDate().toString()
+            }
+            scheduledByDate[sDateStr] = (scheduledByDate[sDateStr] ?: 0) + 1
+        }
+
+        val map = mutableMapOf<LocalDate, HeatmapDayData>()
+        var curr = startDate
+        while (!curr.isAfter(today)) {
+            val dateStr = curr.toString()
+            val score = scoresMap[dateStr]?.score ?: computedScoresMap[dateStr]?.score ?: 0
+            val rank = com.example.domain.dailyScoreToRank(score)
+            val comp = completedByDate[dateStr] ?: 0
+            val sched = scheduledByDate[dateStr] ?: 0
+            val total = maxOf(sched, comp)
+            val xp = xpByDate[dateStr] ?: 0
+
+            map[curr] = HeatmapDayData(
+                date = curr,
+                score = score,
+                rank = rank,
+                completedTasks = comp,
+                totalTasks = total,
+                xpEarned = xp
+            )
+            curr = curr.plusDays(1)
+        }
+        map
+    }
+
+    androidx.compose.runtime.LaunchedEffect(dayDataMap, today) {
+        if (selectedDayData == null || !dayDataMap.containsKey(selectedDayData?.date)) {
+            selectedDayData = dayDataMap[today] ?: dayDataMap.values.lastOrNull()
+        }
+    }
+
+    val weekColumns = remember(selectedRange, today) {
+        val startDate = today.minusDays((selectedRange.days - 1).toLong())
+        var current = startDate
+        while (current.dayOfWeek != java.time.DayOfWeek.MONDAY) {
+            current = current.minusDays(1)
+        }
+
+        val weeks = mutableListOf<List<LocalDate?>>()
+        while (!current.isAfter(today)) {
+            val week = (0..6).map { dayOffset ->
+                val date = current.plusDays(dayOffset.toLong())
+                if (date.isBefore(startDate) || date.isAfter(today)) null else date
+            }
+            weeks.add(week)
+            current = current.plusDays(7)
+        }
+        weeks
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(cardBorder, RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Activity Heatmap",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Daily score & completion heatmap",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    HeatmapRange.values().forEach { range ->
+                        val selected = selectedRange == range
+                        FilterChip(
+                            selected = selected,
+                            onClick = { selectedRange = range },
+                            label = {
+                                Text(
+                                    text = when(range) {
+                                        HeatmapRange.THREE_MONTHS -> "3M"
+                                        HeatmapRange.SIX_MONTHS -> "6M"
+                                        HeatmapRange.ONE_YEAR -> "1Y"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                )
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selected,
+                                selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                            )
+                        )
+                    }
+                }
+            }
+
+            val scrollState = rememberScrollState()
+            androidx.compose.runtime.LaunchedEffect(selectedRange) {
+                scrollState.scrollTo(scrollState.maxValue)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 22.dp, end = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    listOf("M", "T", "W", "T", "F", "S", "S").forEachIndexed { index, label ->
+                        Box(
+                            modifier = Modifier.size(width = 12.dp, height = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (index == 0 || index == 2 || index == 4) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(scrollState),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    weekColumns.forEachIndexed { weekIndex, week ->
+                        val firstValidDate = week.firstOrNull { it != null }
+                        val prevWeekFirstValidDate = if (weekIndex > 0) weekColumns[weekIndex - 1].firstOrNull { it != null } else null
+
+                        val isNewMonth = firstValidDate != null && (prevWeekFirstValidDate == null || firstValidDate.month != prevWeekFirstValidDate.month)
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .height(18.dp)
+                                    .width(12.dp),
+                                contentAlignment = Alignment.BottomStart
+                            ) {
+                                if (isNewMonth && firstValidDate != null) {
+                                    val monthStr = firstValidDate.format(DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))
+                                    Text(
+                                        text = monthStr,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+
+                            week.forEach { date ->
+                                if (date == null) {
+                                    Box(modifier = Modifier.size(12.dp))
+                                } else {
+                                    val dayData = dayDataMap[date] ?: HeatmapDayData(date, 0, "E", 0, 0, 0)
+                                    val isSelected = selectedDayData?.date == date
+                                    val cellColor = getHeatmapCellColor(dayData.score, isShadowMonarch)
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(cellColor)
+                                            .then(
+                                                if (isSelected) {
+                                                    Modifier.border(
+                                                        1.5.dp,
+                                                        if (isShadowMonarch) Color.White else MaterialTheme.colorScheme.onSurface,
+                                                        RoundedCornerShape(3.dp)
+                                                    )
+                                                } else Modifier
+                                            )
+                                            .clickable {
+                                                selectedDayData = dayData
+                                            }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Less",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                listOf(0, 20, 50, 70, 88, 100).forEach { sampleScore ->
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(getHeatmapCellColor(sampleScore, isShadowMonarch))
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                }
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                    text = "More",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            selectedDayData?.let { dayData ->
+                HeatmapDayDetailCard(
+                    dayData = dayData,
+                    isShadowMonarch = isShadowMonarch,
+                    onNavigateToHistory = onNavigateToHistory
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HeatmapDayDetailCard(
+    dayData: HeatmapDayData,
+    isShadowMonarch: Boolean,
+    onNavigateToHistory: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.getDefault()) }
+    val formattedDate = remember(dayData.date) { dayData.date.format(dateFormatter) }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (isShadowMonarch) Color(0xFF161B26) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formattedDate,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                if (dayData.score > 0) {
+                    val rankColor = when (dayData.rank) {
+                        "S" -> MaterialTheme.colorScheme.primary
+                        "A" -> MaterialTheme.colorScheme.secondary
+                        "B" -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = rankColor.copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, rankColor.copy(alpha = 0.3f))
+                    ) {
+                        Text(
+                            text = "Rank ${dayData.rank}",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = rankColor
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                DetailStatTile(
+                    label = "Daily Score",
+                    value = "${dayData.score}",
+                    modifier = Modifier.weight(1f)
+                )
+                DetailStatTile(
+                    label = "Rank",
+                    value = dayData.rank,
+                    modifier = Modifier.weight(1f)
+                )
+                DetailStatTile(
+                    label = "Tasks",
+                    value = "${dayData.completedTasks}/${dayData.totalTasks}",
+                    modifier = Modifier.weight(1f)
+                )
+                DetailStatTile(
+                    label = "XP",
+                    value = "+${dayData.xpEarned}",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            if (onNavigateToHistory != null) {
+                Button(
+                    onClick = onNavigateToHistory,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "View Day",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                            contentDescription = "View Day",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailStatTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun getHeatmapCellColor(score: Int, isShadowMonarch: Boolean): Color {
+    val basePrimary = if (isShadowMonarch) Color(0xFF7967E8) else MaterialTheme.colorScheme.primary
+    val emptyColor = if (isShadowMonarch) {
+        Color(0xFF1E2433)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    }
+
+    return when {
+        score <= 0 -> emptyColor
+        score in 1..39 -> basePrimary.copy(alpha = 0.20f)
+        score in 40..59 -> basePrimary.copy(alpha = 0.40f)
+        score in 60..79 -> basePrimary.copy(alpha = 0.65f)
+        score in 80..94 -> basePrimary.copy(alpha = 0.85f)
+        else -> basePrimary
     }
 }
 

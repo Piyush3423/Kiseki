@@ -8,6 +8,10 @@ class ActivityTaskRepository(private val activityTaskDao: ActivityTaskDao) {
 
     val allTasks: Flow<List<ActivityTask>> = activityTaskDao.getAllTasks()
 
+    suspend fun getAllTasksOneShot(): List<ActivityTask> {
+        return activityTaskDao.getAllTasksOneShot()
+    }
+
     fun getTaskById(id: String): Flow<ActivityTask?> {
         return activityTaskDao.getTaskById(id)
     }

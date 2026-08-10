@@ -27,19 +27,214 @@ import java.util.UUID
 import android.content.Context
 import com.example.util.ReminderScheduler
 
+import com.example.data.entity.XpEvent
+import com.example.data.repository.XpRepository
+import com.example.domain.LevelCalculator
+import com.example.domain.LevelInfo
+import com.example.domain.XpEvaluator
+import kotlinx.coroutines.flow.map
+
 class ActivityTaskViewModel(
     private val repository: ActivityTaskRepository,
     private val categoryRepository: CategoryRepository? = null,
     private val taskGroupRepository: TaskGroupRepository? = null,
     private val templateRepository: TaskGroupTemplateRepository? = null,
+    private val dailyScoreRepository: com.example.data.repository.DailyScoreRepository? = null,
+    private val xpRepository: XpRepository? = null,
+    private val personalBestRepository: com.example.data.repository.PersonalBestRepository? = null,
     private val context: Context? = null
 ) : BaseViewModel() {
 
     init {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            repository.allTasks.collect { tasks ->
+                val scores = com.example.domain.DailyScoreCalculator.calculateAllScores(tasks)
+                dailyScoreRepository?.insertScores(scores)
+            }
+        }
         categoryRepository?.let { catRepo ->
             viewModelScope.launch {
                 catRepo.ensureDefaultCategories()
             }
+        }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            kotlinx.coroutines.flow.combine(
+                repository.allTasks,
+                dailyScoreRepository?.allScores ?: flowOf(emptyList()),
+                xpRepository?.allEvents ?: flowOf(emptyList())
+            ) { tasks, scores, xpEvents ->
+                Triple(tasks, scores, xpEvents)
+            }.collect { (tasks, scores, xpEvents) ->
+                checkAndEvaluatePersonalBests(tasks, scores, xpEvents)
+            }
+        }
+    }
+
+    val allPersonalBests: StateFlow<List<com.example.data.entity.PersonalBest>> =
+        (personalBestRepository?.allRecords ?: flowOf(emptyList()))
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList()
+            )
+
+    private val _activePersonalBestToast = MutableStateFlow<com.example.ui.components.PersonalBestToastData?>(null)
+    val activePersonalBestToast: StateFlow<com.example.ui.components.PersonalBestToastData?> = _activePersonalBestToast.asStateFlow()
+
+    fun dismissPersonalBestToast(recordKey: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            personalBestRepository?.markAcknowledged(recordKey)
+            if (_activePersonalBestToast.value?.recordKey == recordKey) {
+                _activePersonalBestToast.value = null
+            }
+        }
+    }
+
+    private suspend fun checkAndEvaluatePersonalBests(
+        tasks: List<ActivityTask>,
+        dailyScores: List<com.example.data.entity.DailyScore>,
+        xpEvents: List<XpEvent>
+    ) {
+        val pbRepo = personalBestRepository ?: return
+        val existingRecords = pbRepo.getAllRecordsOneShot()
+        val existingMap = existingRecords.associateBy { it.recordKey }
+        val todayStr = java.time.LocalDate.now().toString()
+
+        if (existingRecords.isEmpty()) {
+            val historicalBests = com.example.domain.PersonalBestEvaluator.calculateHistoricalPersonalBests(tasks, dailyScores, xpEvents, todayStr)
+            historicalBests.values.forEach { pb ->
+                pbRepo.saveRecord(pb)
+            }
+            return
+        }
+
+        val zoneId = java.time.ZoneId.systemDefault()
+        val completedTasks = tasks.filter { it.isCompleted && it.completedAt != null }
+
+        val todayCompletedCount = completedTasks.count {
+            java.time.Instant.ofEpochMilli(it.completedAt!!).atZone(zoneId).toLocalDate().toString() == todayStr
+        }
+
+        val todayScoreObj = dailyScores.find { it.date == todayStr }
+        val todayScoreVal = todayScoreObj?.score ?: 0
+
+        val todayXpVal = xpEvents.filter { it.date == todayStr }.sumOf { it.amount }
+
+        val completedDatesSet = completedTasks
+            .map { java.time.Instant.ofEpochMilli(it.completedAt!!).atZone(zoneId).toLocalDate() }
+            .toSet()
+        val currentStreakVal = com.example.domain.PersonalBestEvaluator.calculateLongestStreak(completedDatesSet)
+
+        val todayHpCount = completedTasks.count {
+            it.priority == Priority.High && java.time.Instant.ofEpochMilli(it.completedAt!!).atZone(zoneId).toLocalDate().toString() == todayStr
+        }
+
+        val candidates = listOf(
+            com.example.domain.PersonalBestEvaluator.KEY_MOST_TASKS to todayCompletedCount,
+            com.example.domain.PersonalBestEvaluator.KEY_HIGHEST_SCORE to todayScoreVal,
+            com.example.domain.PersonalBestEvaluator.KEY_MOST_XP to todayXpVal,
+            com.example.domain.PersonalBestEvaluator.KEY_LONGEST_STREAK to currentStreakVal,
+            com.example.domain.PersonalBestEvaluator.KEY_MOST_HIGH_PRIORITY to todayHpCount
+        )
+
+        candidates.forEach { (key, value) ->
+            val currentRecord = existingMap[key]
+            val eval = com.example.domain.PersonalBestEvaluator.evaluateRecord(key, value, todayStr, currentRecord)
+            if (eval.isNewRecord && eval.record != null) {
+                pbRepo.saveRecord(eval.record)
+                _activePersonalBestToast.value = com.example.ui.components.PersonalBestToastData(
+                    recordKey = key,
+                    title = com.example.domain.PersonalBestEvaluator.getRecordTitle(key),
+                    formattedValue = com.example.domain.PersonalBestEvaluator.formatRecordValue(key, value),
+                    previousValue = eval.previousValue
+                )
+            }
+        }
+
+        if (_activePersonalBestToast.value == null) {
+            val unack = existingRecords.firstOrNull { !it.acknowledged && it.value > 0 }
+            if (unack != null) {
+                _activePersonalBestToast.value = com.example.ui.components.PersonalBestToastData(
+                    recordKey = unack.recordKey,
+                    title = com.example.domain.PersonalBestEvaluator.getRecordTitle(unack.recordKey),
+                    formattedValue = com.example.domain.PersonalBestEvaluator.formatRecordValue(unack.recordKey, unack.value),
+                    previousValue = unack.previousValue
+                )
+            }
+        }
+    }
+
+    val allXpEvents: StateFlow<List<XpEvent>> = (xpRepository?.allEvents
+        ?: flowOf(emptyList()))
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val levelInfo: StateFlow<LevelInfo> = allXpEvents
+        .map { events -> LevelCalculator.calculateLevelInfo(events.sumOf { it.amount }) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = LevelCalculator.calculateLevelInfo(0)
+        )
+
+    val xpThisWeek: StateFlow<Int> = allXpEvents
+        .map { events ->
+            val now = System.currentTimeMillis()
+            val sevenDaysAgo = now - (7L * 24 * 60 * 60 * 1000)
+            events.filter { it.timestamp >= sevenDaysAgo }.sumOf { it.amount }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0
+        )
+
+    val xpThisMonth: StateFlow<Int> = allXpEvents
+        .map { events ->
+            val now = System.currentTimeMillis()
+            val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
+            events.filter { it.timestamp >= thirtyDaysAgo }.sumOf { it.amount }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0
+        )
+
+    private val _xpToastAmount = MutableStateFlow<Int?>(null)
+    val xpToastAmount: StateFlow<Int?> = _xpToastAmount.asStateFlow()
+
+    fun clearXpToast() {
+        _xpToastAmount.value = null
+    }
+
+    private suspend fun checkAndAwardXp(task: ActivityTask) {
+        val repo = xpRepository ?: return
+        if (!task.isCompleted) return
+
+        val existingEvents = repo.getEventsForTask(task.id)
+        val newEvents = XpEvaluator.evaluateTaskCompletion(task, existingEvents)
+        if (newEvents.isNotEmpty()) {
+            newEvents.forEach { repo.insertEvent(it) }
+            val totalEarned = newEvents.sumOf { it.amount }
+            if (totalEarned > 0) {
+                _xpToastAmount.value = totalEarned
+            }
+        }
+
+        // Evaluate daily bonuses
+        val dateStr = XpEvaluator.getTaskDateStr(task)
+        val tasksForDay = repository.getAllTasksOneShot().filter {
+            XpEvaluator.getTaskDateStr(it) == dateStr
+        }
+        val currentScore = dailyScoreRepository?.getScoreForDateOneShot(dateStr)?.score ?: 0
+        val existingDateEvents = repo.getEventsForDateAndType(dateStr, "PERFECT_DAY") + repo.getEventsForDateAndType(dateStr, "HIGH_SCORE_DAY")
+        val bonusEvents = XpEvaluator.evaluateDailyBonuses(dateStr, tasksForDay, currentScore, existingDateEvents)
+        if (bonusEvents.isNotEmpty()) {
+            bonusEvents.forEach { repo.insertEvent(it) }
         }
     }
 
@@ -69,6 +264,18 @@ class ActivityTaskViewModel(
             initialValue = emptyList()
         )
 
+    val allDailyScores = dailyScoreRepository?.allScores?.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList<com.example.data.entity.DailyScore>()) ?: MutableStateFlow(emptyList<com.example.data.entity.DailyScore>()).asStateFlow()
+
+    val momentumInfo: StateFlow<com.example.domain.MomentumResult> = kotlinx.coroutines.flow.combine(
+        allTasks,
+        allDailyScores
+    ) { tasks, scores ->
+        com.example.domain.MomentumCalculator.calculate(tasks, scores)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = com.example.domain.MomentumCalculator.calculate(emptyList(), emptyList())
+    )
     val allCategories: StateFlow<List<Category>> = (categoryRepository?.allCategories
         ?: flowOf(emptyList()))
         .stateIn(
@@ -94,6 +301,9 @@ class ActivityTaskViewModel(
         }
         repository.insert(taskToInsert)
         context?.let { ReminderScheduler.scheduleOrCancelReminder(it, taskToInsert) }
+        if (taskToInsert.isCompleted) {
+            checkAndAwardXp(taskToInsert)
+        }
     }
 
     fun updateTask(task: ActivityTask) = viewModelScope.launch {
@@ -123,6 +333,10 @@ class ActivityTaskViewModel(
 
         repository.update(taskToSave)
         context?.let { ReminderScheduler.scheduleOrCancelReminder(it, taskToSave) }
+
+        if (taskToSave.isCompleted) {
+            checkAndAwardXp(taskToSave)
+        }
 
         if (existingTask != null && !existingTask.isCompleted && taskToSave.isCompleted && taskToSave.repeatType != RepeatType.None) {
             val nextDueDate = RepeatUtils.calculateNextDueDate(
@@ -369,6 +583,9 @@ class ActivityTaskViewModelFactory(
     private val categoryRepository: CategoryRepository? = null,
     private val taskGroupRepository: TaskGroupRepository? = null,
     private val templateRepository: TaskGroupTemplateRepository? = null,
+    private val dailyScoreRepository: com.example.data.repository.DailyScoreRepository? = null,
+    private val xpRepository: XpRepository? = null,
+    private val personalBestRepository: com.example.data.repository.PersonalBestRepository? = null,
     private val context: Context? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -379,6 +596,9 @@ class ActivityTaskViewModelFactory(
                 categoryRepository = categoryRepository,
                 taskGroupRepository = taskGroupRepository,
                 templateRepository = templateRepository,
+                dailyScoreRepository = dailyScoreRepository,
+                xpRepository = xpRepository,
+                personalBestRepository = personalBestRepository,
                 context = context?.applicationContext
             ) as T
         }

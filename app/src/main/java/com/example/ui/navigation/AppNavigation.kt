@@ -80,8 +80,8 @@ import com.example.viewmodel.ActivityTaskViewModelFactory
 import com.example.viewmodel.SettingsViewModel
 import com.example.viewmodel.SettingsViewModelFactory
 
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.components.PersonalBestOverlay
 
 object Routes {
     const val TODAY = "today"
@@ -110,7 +110,10 @@ fun AppNavigation(
     val categoryRepository = remember { com.example.data.repository.CategoryRepository(database.categoryDao(), database.activityTaskDao()) }
     val taskGroupRepository = remember { com.example.data.repository.TaskGroupRepository(database.taskGroupDao(), database.activityTaskDao()) }
     val templateRepository = remember { com.example.data.repository.TaskGroupTemplateRepository(database.taskGroupTemplateDao(), database.activityTaskDao(), database.taskGroupDao()) }
-    val viewModel: ActivityTaskViewModel = viewModel(factory = ActivityTaskViewModelFactory(repository, categoryRepository, taskGroupRepository, templateRepository, context))
+    val dailyScoreRepository = remember { com.example.data.repository.DailyScoreRepository(database.dailyScoreDao()) }
+    val xpRepository = remember { com.example.data.repository.XpRepository(database.xpEventDao()) }
+    val personalBestRepository = remember { com.example.data.repository.PersonalBestRepository(database.personalBestDao()) }
+    val viewModel: ActivityTaskViewModel = viewModel(factory = ActivityTaskViewModelFactory(repository, categoryRepository, taskGroupRepository, templateRepository, dailyScoreRepository, xpRepository, personalBestRepository, context))
 
     val prefsRepo = remember(context) { preferencesRepository ?: UserPreferencesRepository(context) }
     val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(prefsRepo, context))
@@ -317,11 +320,14 @@ fun AppNavigation(
         val density = context.resources.displayMetrics.density
         val moveOffset = (16 * density).toInt()
 
-        NavHost(
-            navController = navController,
-            startDestination = startRoute,
-            modifier = Modifier.padding(innerPadding),
-            enterTransition = {
+        val activePbToast by viewModel.activePersonalBestToast.collectAsStateWithLifecycle()
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            NavHost(
+                navController = navController,
+                startDestination = startRoute,
+                modifier = Modifier.padding(innerPadding),
+                enterTransition = {
                 val initialOrder = getTabOrder(initialState.destination.route)
                 val targetOrder = getTabOrder(targetState.destination.route)
                 if (initialOrder != -1 && targetOrder != -1) {
@@ -375,7 +381,16 @@ fun AppNavigation(
             composable(Routes.ANALYTICS) {
                 AnalyticsScreen(
                     viewModel = viewModel,
-                    themeMode = userPreferences.themeMode
+                    themeMode = userPreferences.themeMode,
+                    onNavigateToHistory = {
+                        navController.navigate(Routes.HISTORY) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
                 )
             }
             composable(Routes.SETTINGS) {
@@ -447,7 +462,13 @@ fun AppNavigation(
                 )
             }
         }
+
+        PersonalBestOverlay(
+            toastData = activePbToast,
+            onDismiss = { key -> viewModel.dismissPersonalBestToast(key) }
+        )
     }
+}
 }
 
 @Composable
