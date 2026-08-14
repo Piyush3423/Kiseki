@@ -276,6 +276,25 @@ class ActivityTaskViewModel(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = com.example.domain.MomentumCalculator.calculate(emptyList(), emptyList())
     )
+
+    val whatChangedInsights: StateFlow<List<com.example.domain.InsightItem>> = kotlinx.coroutines.flow.combine(
+        allTasks,
+        allDailyScores
+    ) { tasks, scores ->
+        com.example.domain.InsightEvaluator.evaluateInsights(tasks, scores)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val highFrictionTasks: StateFlow<List<ActivityTask>> = allTasks
+        .map { tasks -> com.example.domain.TaskFrictionEvaluator.evaluateHighFrictionTasks(tasks) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
     val allCategories: StateFlow<List<Category>> = (categoryRepository?.allCategories
         ?: flowOf(emptyList()))
         .stateIn(
@@ -311,7 +330,8 @@ class ActivityTaskViewModel(
         val taskToSave = if (existingTask != null) {
             if (!existingTask.isCompleted && task.isCompleted) {
                 // Task marked completed
-                task.copy(completedAt = task.completedAt ?: System.currentTimeMillis())
+                val completedTask = task.copy(completedAt = task.completedAt ?: System.currentTimeMillis())
+                com.example.domain.TaskFrictionEvaluator.recordCompletion(completedTask, completedTask.completedAt!!)
             } else if (existingTask.isCompleted && !task.isCompleted) {
                 // Task marked incomplete
                 task.copy(completedAt = null)
@@ -320,12 +340,18 @@ class ActivityTaskViewModel(
                 if (task.isCompleted) {
                     task.copy(completedAt = task.completedAt ?: existingTask.completedAt ?: System.currentTimeMillis())
                 } else {
-                    task.copy(completedAt = null)
+                    val incTask = task.copy(completedAt = null)
+                    if (existingTask.dueDate != null && incTask.dueDate != null && incTask.dueDate != existingTask.dueDate && incTask.dueDate > existingTask.dueDate) {
+                        com.example.domain.TaskFrictionEvaluator.recordReschedule(incTask, incTask.dueDate)
+                    } else {
+                        incTask
+                    }
                 }
             }
         } else {
             if (task.isCompleted) {
-                task.copy(completedAt = task.completedAt ?: System.currentTimeMillis())
+                val completedTask = task.copy(completedAt = task.completedAt ?: System.currentTimeMillis())
+                com.example.domain.TaskFrictionEvaluator.recordCompletion(completedTask, completedTask.completedAt!!)
             } else {
                 task.copy(completedAt = null)
             }
@@ -358,6 +384,31 @@ class ActivityTaskViewModel(
             repository.insert(nextTask)
             context?.let { ReminderScheduler.scheduleOrCancelReminder(it, nextTask) }
         }
+    }
+
+    fun breakTaskIntoSubtasks(parentTask: ActivityTask, subtaskTitles: List<String>) = viewModelScope.launch {
+        val subtasks = com.example.domain.TaskFrictionEvaluator.createSubtasksForParent(parentTask, subtaskTitles)
+        if (subtasks.isNotEmpty()) {
+            subtasks.forEach { repository.insert(it) }
+            val updatedParent = com.example.domain.TaskFrictionEvaluator.suppressFriction(parentTask)
+            repository.update(updatedParent)
+        }
+    }
+
+    fun rescheduleFrictionTask(task: ActivityTask, newDueDate: Long?) = viewModelScope.launch {
+        val updatedTask = com.example.domain.TaskFrictionEvaluator.recordReschedule(task, newDueDate)
+        repository.update(updatedTask)
+        context?.let { ReminderScheduler.scheduleOrCancelReminder(it, updatedTask) }
+    }
+
+    fun lowerTaskPriority(task: ActivityTask) = viewModelScope.launch {
+        val updatedTask = com.example.domain.TaskFrictionEvaluator.lowerPriority(task)
+        repository.update(updatedTask)
+    }
+
+    fun keepTaskAsIs(task: ActivityTask) = viewModelScope.launch {
+        val updatedTask = com.example.domain.TaskFrictionEvaluator.suppressFriction(task)
+        repository.update(updatedTask)
     }
 
     fun deleteTask(task: ActivityTask) = viewModelScope.launch {

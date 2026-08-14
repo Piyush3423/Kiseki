@@ -126,6 +126,7 @@ fun AnalyticsScreen(
     val tasks by viewModel.allTasks.collectAsStateWithLifecycle()
     val allDailyScores by viewModel.allDailyScores.collectAsStateWithLifecycle()
     val momentumInfo by viewModel.momentumInfo.collectAsStateWithLifecycle()
+    val whatChangedInsights by viewModel.whatChangedInsights.collectAsStateWithLifecycle()
     val allPersonalBests by viewModel.allPersonalBests.collectAsStateWithLifecycle()
     val levelInfo by viewModel.levelInfo.collectAsStateWithLifecycle()
     val xpThisWeek by viewModel.xpThisWeek.collectAsStateWithLifecycle()
@@ -393,6 +394,13 @@ fun AnalyticsScreen(
                 // Momentum Analytics Card
                 MomentumAnalyticsCard(
                     momentumInfo = momentumInfo,
+                    cardBorder = cardBorder,
+                    isShadowMonarch = isShadowMonarch
+                )
+
+                // What Changed Insights Card
+                WhatChangedAnalyticsCard(
+                    insights = whatChangedInsights,
                     cardBorder = cardBorder,
                     isShadowMonarch = isShadowMonarch
                 )
@@ -2085,6 +2093,190 @@ private fun getHeatmapCellColor(score: Int, isShadowMonarch: Boolean): Color {
         score in 60..79 -> basePrimary.copy(alpha = 0.65f)
         score in 80..94 -> basePrimary.copy(alpha = 0.85f)
         else -> basePrimary
+    }
+}
+
+@Composable
+fun WhatChangedAnalyticsCard(
+    insights: List<com.example.domain.InsightItem>,
+    cardBorder: BorderStroke,
+    isShadowMonarch: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(cardBorder, RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Column {
+                Text(
+                    text = "WHAT CHANGED",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp
+                    ),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Behavioral shifts & productivity insights",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (insights.isEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isShadowMonarch) Color(0xFF161B26) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Not enough task history yet to detect insights. Keep completing daily tasks!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    insights.forEach { insight ->
+                        InsightItemRow(
+                            insight = insight,
+                            isShadowMonarch = isShadowMonarch
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InsightItemRow(
+    insight: com.example.domain.InsightItem,
+    isShadowMonarch: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val (iconText, iconColor, badgeBg) = when (insight.type) {
+        com.example.domain.InsightType.MAJOR_IMPROVEMENT -> Triple(
+            "↑",
+            Color(0xFF34A853),
+            Color(0xFF34A853).copy(alpha = 0.15f)
+        )
+        com.example.domain.InsightType.MAJOR_DECLINE -> Triple(
+            "↓",
+            Color(0xFFEA4335),
+            Color(0xFFEA4335).copy(alpha = 0.15f)
+        )
+        com.example.domain.InsightType.REPEATED_PATTERN -> Triple(
+            "↻",
+            if (isShadowMonarch) Color(0xFF9D8CFF) else MaterialTheme.colorScheme.primary,
+            if (isShadowMonarch) Color(0xFF9D8CFF).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+        )
+        com.example.domain.InsightType.ACTIONABLE_OBSERVATION -> Triple(
+            "💡",
+            if (isShadowMonarch) Color(0xFFFFB74D) else Color(0xFFF57C00),
+            if (isShadowMonarch) Color(0xFFFFB74D).copy(alpha = 0.15f) else Color(0xFFFFF3E0)
+        )
+    }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (isShadowMonarch) Color(0xFF161B26) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = badgeBg,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Text(
+                        text = iconText,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = iconColor
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = insight.title,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Text(
+                    text = insight.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = insight.period,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = iconColor
+                    )
+
+                    Text(
+                        text = "•",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Text(
+                        text = "${insight.dataCount} data points",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }
 

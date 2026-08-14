@@ -152,6 +152,11 @@ fun HomeScreen(
     val levelInfo by viewModel.levelInfo.collectAsStateWithLifecycle()
     val momentumInfo by viewModel.momentumInfo.collectAsStateWithLifecycle()
     val xpToastAmount by viewModel.xpToastAmount.collectAsStateWithLifecycle()
+    val highFrictionTasks by viewModel.highFrictionTasks.collectAsStateWithLifecycle()
+    val topFrictionTask = androidx.compose.runtime.remember(highFrictionTasks) { highFrictionTasks.firstOrNull() }
+
+    var breakSubtasksTask by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<ActivityTask?>(null) }
+    var rescheduleFrictionTask by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<ActivityTask?>(null) }
 
     var isSearchActive by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var searchQuery by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
@@ -807,6 +812,42 @@ fun HomeScreen(
             if (scoreForSelectedDate != null && (totalSelectedDateTasks > 0 || scoreForSelectedDate.score > 0)) {
                 com.example.ui.components.DailyScoreCard(score = scoreForSelectedDate, selectedDate = selectedDate, today = today)
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            topFrictionTask?.let { task ->
+                com.example.ui.components.FrictionSuggestionCard(
+                    task = task,
+                    onBreakIntoSubtasks = { breakSubtasksTask = task },
+                    onReschedule = { rescheduleFrictionTask = task },
+                    onLowerPriority = { viewModel.lowerTaskPriority(task) },
+                    onKeepAsIs = { viewModel.keepTaskAsIs(task) },
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    isShadowMonarch = isShadowMonarch
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            breakSubtasksTask?.let { task ->
+                com.example.ui.components.BreakIntoSubtasksDialog(
+                    taskTitle = task.title,
+                    onDismiss = { breakSubtasksTask = null },
+                    onConfirm = { subtasks ->
+                        viewModel.breakTaskIntoSubtasks(task, subtasks)
+                        breakSubtasksTask = null
+                    }
+                )
+            }
+
+            rescheduleFrictionTask?.let { task ->
+                com.example.ui.components.RescheduleFrictionTaskDialog(
+                    taskTitle = task.title,
+                    currentDueDate = task.dueDate,
+                    onDismiss = { rescheduleFrictionTask = null },
+                    onConfirm = { newDueDate ->
+                        viewModel.rescheduleFrictionTask(task, newDueDate)
+                        rescheduleFrictionTask = null
+                    }
+                )
             }
 
             // Main Content

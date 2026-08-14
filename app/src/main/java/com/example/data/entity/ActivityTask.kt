@@ -38,5 +38,10 @@ data class ActivityTask(
     val customDays: Int? = null,
     val isReminderEnabled: Boolean = false,
     val reminderTime: Long? = null,
-    val groupId: String? = null
+    val groupId: String? = null,
+    val rescheduleCount: Int = 0,
+    val missCount: Int = 0,
+    val lateCompletionCount: Int = 0,
+    val frictionScore: Float = 0f,
+    val frictionSuppressedUntil: Long? = null
 )

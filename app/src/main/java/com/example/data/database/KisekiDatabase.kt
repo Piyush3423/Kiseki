@@ -67,7 +67,17 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
     }
 }
 
-@Database(entities = [ActivityTask::class, Category::class, TaskGroup::class, TaskGroupTemplate::class, DailyScore::class, XpEvent::class, PersonalBest::class], version = 10, exportSchema = false)
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE activity_tasks ADD COLUMN rescheduleCount INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE activity_tasks ADD COLUMN missCount INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE activity_tasks ADD COLUMN lateCompletionCount INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE activity_tasks ADD COLUMN frictionScore REAL NOT NULL DEFAULT 0.0")
+        db.execSQL("ALTER TABLE activity_tasks ADD COLUMN frictionSuppressedUntil INTEGER DEFAULT NULL")
+    }
+}
+
+@Database(entities = [ActivityTask::class, Category::class, TaskGroup::class, TaskGroupTemplate::class, DailyScore::class, XpEvent::class, PersonalBest::class], version = 11, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class KisekiDatabase : RoomDatabase() {
     abstract fun activityTaskDao(): ActivityTaskDao
@@ -89,7 +99,7 @@ abstract class KisekiDatabase : RoomDatabase() {
                     KisekiDatabase::class.java,
                     "kiseki_database"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     .build()
                 INSTANCE = instance
                 instance
