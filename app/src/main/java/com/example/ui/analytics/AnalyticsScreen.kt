@@ -8,8 +8,18 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -1271,8 +1281,21 @@ private fun PersonalBestTile(
     value: String,
     modifier: Modifier = Modifier
 ) {
+    val scaleAnim = remember { androidx.compose.animation.core.Animatable(1f) }
+
+    LaunchedEffect(value) {
+        if (value != "--" && value.isNotBlank()) {
+            scaleAnim.animateTo(0.97f, tween(100, easing = FastOutSlowInEasing))
+            scaleAnim.animateTo(1.03f, tween(120, easing = FastOutSlowInEasing))
+            scaleAnim.animateTo(1.0f, tween(110, easing = FastOutSlowInEasing))
+        }
+    }
+
     Surface(
-        modifier = modifier,
+        modifier = modifier.graphicsLayer {
+            scaleX = scaleAnim.value
+            scaleY = scaleAnim.value
+        },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
     ) {
@@ -1286,14 +1309,23 @@ private fun PersonalBestTile(
                 maxLines = 1
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 16.sp
-                ),
-                color = MaterialTheme.colorScheme.primary
-            )
+            AnimatedContent(
+                targetState = value,
+                transitionSpec = {
+                    (fadeIn(tween(180, easing = FastOutSlowInEasing)) + slideInVertically(tween(180, easing = FastOutSlowInEasing)) { -it / 4 }) togetherWith
+                            (fadeOut(tween(160, easing = FastOutSlowInEasing)) + slideOutVertically(tween(160, easing = FastOutSlowInEasing)) { it / 4 })
+                },
+                label = "PersonalBestValueTransition"
+            ) { targetValue ->
+                Text(
+                    text = targetValue,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp
+                    ),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
@@ -2192,6 +2224,23 @@ private fun InsightItemRow(
     isShadowMonarch: Boolean,
     modifier: Modifier = Modifier
 ) {
+    var isVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(insight) {
+        isVisible = true
+    }
+
+    val alphaAnim by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+        label = "InsightRowAlpha"
+    )
+
+    val offsetYAnim by animateFloatAsState(
+        targetValue = if (isVisible) 0f else 6f,
+        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+        label = "InsightRowOffsetY"
+    )
+
     val (iconText, iconColor, badgeBg) = when (insight.type) {
         com.example.domain.InsightType.MAJOR_IMPROVEMENT -> Triple(
             "↑",
@@ -2216,7 +2265,12 @@ private fun InsightItemRow(
     }
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = alphaAnim
+                translationY = offsetYAnim.dp.toPx()
+            },
         shape = RoundedCornerShape(16.dp),
         color = if (isShadowMonarch) Color(0xFF161B26) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))

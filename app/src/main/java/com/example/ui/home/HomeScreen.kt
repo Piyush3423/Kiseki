@@ -22,6 +22,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
@@ -2181,17 +2185,6 @@ fun MonarchDailyProgressPanel(
     modifier: Modifier = Modifier
 ) {
     val rank = remember(dailyScore) { com.example.domain.dailyScoreToRank(dailyScore) }
-    val rankScale = remember { androidx.compose.animation.core.Animatable(1f) }
-
-    LaunchedEffect(rank, dailyScore) {
-        if (rank == "S") {
-            rankScale.snapTo(0.9f)
-            rankScale.animateTo(1.06f, tween(250))
-            rankScale.animateTo(1.0f, tween(150))
-        } else {
-            rankScale.snapTo(1f)
-        }
-    }
 
     Box(
         modifier = modifier
@@ -2237,28 +2230,42 @@ fun MonarchDailyProgressPanel(
                             ),
                             color = Color(0xFFA9B0C0)
                         )
-                        Text(
-                            text = rank,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            color = if (rank == "S") Color(0xFF7967E8) else Color(0xFFF2F3F7),
-                            modifier = Modifier.graphicsLayer {
-                                scaleX = rankScale.value
-                                scaleY = rankScale.value
-                            }
-                        )
+                        AnimatedContent(
+                            targetState = rank,
+                            transitionSpec = {
+                                (fadeIn(tween(220, easing = FastOutSlowInEasing)) + scaleIn(initialScale = 0.96f, animationSpec = tween(220, easing = FastOutSlowInEasing))) togetherWith
+                                        (fadeOut(tween(160, easing = FastOutSlowInEasing)) + scaleOut(targetScale = 0.96f, animationSpec = tween(160, easing = FastOutSlowInEasing)))
+                            },
+                            label = "MonarchDailyRankTransition"
+                        ) { targetRank ->
+                            Text(
+                                text = targetRank,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color = if (targetRank == "S") Color(0xFF7967E8) else Color(0xFFF2F3F7)
+                            )
+                        }
                     }
 
-                    Text(
-                        text = "$completionPercentage%",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = Color(0xFF7967E8)
-                    )
+                    AnimatedContent(
+                        targetState = completionPercentage,
+                        transitionSpec = {
+                            (fadeIn(tween(200, easing = FastOutSlowInEasing)) + slideInVertically(tween(200, easing = FastOutSlowInEasing)) { -it / 4 }) togetherWith
+                                    (fadeOut(tween(180, easing = FastOutSlowInEasing)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 4 })
+                        },
+                        label = "MonarchCompletionPercentageTransition"
+                    ) { targetPct ->
+                        Text(
+                            text = "$targetPct%",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = Color(0xFF7967E8)
+                        )
+                    }
                 }
             }
 
@@ -2270,8 +2277,8 @@ fun MonarchDailyProgressPanel(
                     .background(Color(0xFF202638))
             ) {
                 val animatedProgress by animateFloatAsState(
-                    targetValue = completionPercentage / 100f,
-                    animationSpec = tween(MotionStandard),
+                    targetValue = (completionPercentage / 100f).coerceIn(0f, 1f),
+                    animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
                     label = "monarch_daily_progress"
                 )
                 Box(
@@ -2292,14 +2299,23 @@ fun MonarchDailyProgressPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "$completedCount / $totalCount tasks completed",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Normal
-                    ),
-                    color = Color(0xFF737B8E)
-                )
+                AnimatedContent(
+                    targetState = "$completedCount / $totalCount",
+                    transitionSpec = {
+                        (fadeIn(tween(200, easing = FastOutSlowInEasing)) + slideInVertically(tween(200, easing = FastOutSlowInEasing)) { -it / 4 }) togetherWith
+                                (fadeOut(tween(180, easing = FastOutSlowInEasing)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 4 })
+                    },
+                    label = "MonarchCompletedTaskCountTransition"
+                ) { targetText ->
+                    Text(
+                        text = "$targetText tasks completed",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Normal
+                        ),
+                        color = Color(0xFF737B8E)
+                    )
+                }
             }
         }
     }
@@ -2771,6 +2787,12 @@ fun HomeLevelIndicator(
     modifier: Modifier = Modifier,
     isShadowMonarch: Boolean = false
 ) {
+    val animatedXpProgress by animateFloatAsState(
+        targetValue = levelInfo.progress.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        label = "HomeLevelProgress"
+    )
+
     androidx.compose.material3.Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -2798,14 +2820,23 @@ fun HomeLevelIndicator(
                     )
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                Text(
-                    text = "LV. ${levelInfo.level}",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    ),
-                    color = Color.White
-                )
+                AnimatedContent(
+                    targetState = levelInfo.level,
+                    transitionSpec = {
+                        (fadeIn(tween(200, easing = FastOutSlowInEasing)) + slideInVertically(tween(200, easing = FastOutSlowInEasing)) { -it / 4 }) togetherWith
+                                (fadeOut(tween(180, easing = FastOutSlowInEasing)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 4 })
+                    },
+                    label = "LevelNumberTransition"
+                ) { targetLevel ->
+                    Text(
+                        text = "LV. $targetLevel",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        ),
+                        color = Color.White
+                    )
+                }
             }
 
             Column(modifier = Modifier.weight(1f)) {
@@ -2822,18 +2853,27 @@ fun HomeLevelIndicator(
                         ),
                         color = if (isShadowMonarch) MonarchTextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        text = "${levelInfo.currentLevelXp} / ${levelInfo.requiredXpForNextLevel} XP",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
-                        ),
-                        color = if (isShadowMonarch) MonarchTextPrimary else MaterialTheme.colorScheme.onSurface
-                    )
+                    AnimatedContent(
+                        targetState = "${levelInfo.currentLevelXp} / ${levelInfo.requiredXpForNextLevel} XP",
+                        transitionSpec = {
+                            (fadeIn(tween(200, easing = FastOutSlowInEasing)) + slideInVertically(tween(200, easing = FastOutSlowInEasing)) { -it / 4 }) togetherWith
+                                    (fadeOut(tween(180, easing = FastOutSlowInEasing)) + slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it / 4 })
+                        },
+                        label = "XpNumbersTransition"
+                    ) { targetXpText ->
+                        Text(
+                            text = targetXpText,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
+                            ),
+                            color = if (isShadowMonarch) MonarchTextPrimary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(3.dp))
                 LinearProgressIndicator(
-                    progress = { levelInfo.progress },
+                    progress = { animatedXpProgress },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(5.dp)

@@ -7,7 +7,11 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -396,14 +400,21 @@ fun HistoryScreen(
         }
 
         // Content List
-        if (totalCompletedCount == 0) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
+        AnimatedContent(
+            targetState = Triple(totalCompletedCount, groupedCompletedTasks.isEmpty(), selectedDateRange),
+            transitionSpec = {
+                fadeIn(tween(220, easing = FastOutSlowInEasing)) togetherWith fadeOut(tween(160, easing = FastOutSlowInEasing))
+            },
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            label = "HistoryContentTransition"
+        ) { (totalCount, isGroupedEmpty, _) ->
+            if (totalCount == 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
@@ -438,14 +449,13 @@ fun HistoryScreen(
                     )
                 }
             }
-        } else if (groupedCompletedTasks.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            } else if (isGroupedEmpty) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
@@ -484,12 +494,11 @@ fun HistoryScreen(
                     }
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 groupedCompletedTasks.forEach { (date, tasksInGroup) ->
@@ -605,6 +614,7 @@ fun HistoryScreen(
             onDismissRequest = { showFilterBottomSheet = false }
         )
     }
+}
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
