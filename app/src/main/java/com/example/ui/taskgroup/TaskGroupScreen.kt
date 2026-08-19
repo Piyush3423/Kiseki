@@ -1,5 +1,8 @@
 package com.example.ui.taskgroup
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -265,7 +268,12 @@ fun TaskGroupScreen(
                             onEdit = { groupToEdit = group },
                             onDelete = { groupToDelete = group },
                             onToggleTaskComplete = { task -> viewModel.updateTask(task.copy(isCompleted = !task.isCompleted)) },
-                            themeMode = themeMode
+                            themeMode = themeMode,
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                fadeOutSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                                placementSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                            )
                         )
                     }
                 }
@@ -472,6 +480,7 @@ fun MonarchTaskGroupPanel(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .animateContentSize(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
             .clip(RoundedCornerShape(14.dp))
             .background(Color(0xFF171C28))
             .border(BorderStroke(1.dp, Color(0xFF283044)), RoundedCornerShape(14.dp))

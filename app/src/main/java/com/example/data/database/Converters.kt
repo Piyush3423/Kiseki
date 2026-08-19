@@ -24,4 +24,15 @@ class Converters {
     fun toRepeatType(repeatType: String): RepeatType {
         return RepeatType.valueOf(repeatType)
     }
+
+    @TypeConverter
+    fun fromStringList(list: List<String>?): String {
+        return list?.joinToString("|||") ?: ""
+    }
+
+    @TypeConverter
+    fun toStringList(data: String?): List<String> {
+        if (data.isNullOrBlank()) return emptyList()
+        return data.split("|||").filter { it.isNotBlank() }
+    }
 }

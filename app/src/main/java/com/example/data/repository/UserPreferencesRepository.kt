@@ -23,7 +23,9 @@ data class UserPreferences(
     val defaultStartScreen: String = "today",
     val showCompletedOnToday: Boolean = true,
     val startWeekOnMonday: Boolean = true,
-    val enableReminderNotifications: Boolean = true
+    val enableReminderNotifications: Boolean = true,
+    val enableEndOfDayReview: Boolean = false,
+    val endOfDayReviewTime: String = "21:00"
 )
 
 class UserPreferencesRepository(private val context: Context) {
@@ -34,6 +36,8 @@ class UserPreferencesRepository(private val context: Context) {
         val SHOW_COMPLETED_ON_TODAY = booleanPreferencesKey("show_completed_on_today")
         val START_WEEK_ON_MONDAY = booleanPreferencesKey("start_week_on_monday")
         val ENABLE_REMINDER_NOTIFICATIONS = booleanPreferencesKey("enable_reminder_notifications")
+        val ENABLE_END_OF_DAY_REVIEW = booleanPreferencesKey("enable_end_of_day_review")
+        val END_OF_DAY_REVIEW_TIME = stringPreferencesKey("end_of_day_review_time")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data.map { preferences ->
@@ -49,7 +53,9 @@ class UserPreferencesRepository(private val context: Context) {
             defaultStartScreen = preferences[PreferencesKeys.DEFAULT_START_SCREEN] ?: "today",
             showCompletedOnToday = preferences[PreferencesKeys.SHOW_COMPLETED_ON_TODAY] ?: true,
             startWeekOnMonday = preferences[PreferencesKeys.START_WEEK_ON_MONDAY] ?: true,
-            enableReminderNotifications = preferences[PreferencesKeys.ENABLE_REMINDER_NOTIFICATIONS] ?: true
+            enableReminderNotifications = preferences[PreferencesKeys.ENABLE_REMINDER_NOTIFICATIONS] ?: true,
+            enableEndOfDayReview = preferences[PreferencesKeys.ENABLE_END_OF_DAY_REVIEW] ?: false,
+            endOfDayReviewTime = preferences[PreferencesKeys.END_OF_DAY_REVIEW_TIME] ?: "21:00"
         )
     }
 
@@ -83,6 +89,18 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
+    suspend fun setEnableEndOfDayReview(enable: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ENABLE_END_OF_DAY_REVIEW] = enable
+        }
+    }
+
+    suspend fun setEndOfDayReviewTime(time: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.END_OF_DAY_REVIEW_TIME] = time
+        }
+    }
+
     fun isRemindersEnabledSync(): Boolean {
         return runBlocking {
             try {
@@ -91,6 +109,30 @@ class UserPreferencesRepository(private val context: Context) {
                 }.first()
             } catch (e: Exception) {
                 true
+            }
+        }
+    }
+
+    fun isEndOfDayReviewEnabledSync(): Boolean {
+        return runBlocking {
+            try {
+                context.dataStore.data.map { preferences ->
+                    preferences[PreferencesKeys.ENABLE_END_OF_DAY_REVIEW] ?: false
+                }.first()
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
+
+    fun getEndOfDayReviewTimeSync(): String {
+        return runBlocking {
+            try {
+                context.dataStore.data.map { preferences ->
+                    preferences[PreferencesKeys.END_OF_DAY_REVIEW_TIME] ?: "21:00"
+                }.first()
+            } catch (e: Exception) {
+                "21:00"
             }
         }
     }

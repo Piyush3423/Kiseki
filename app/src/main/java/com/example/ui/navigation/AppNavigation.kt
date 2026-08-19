@@ -1,5 +1,9 @@
 package com.example.ui.navigation
 
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -43,7 +47,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,8 +100,10 @@ object Routes {
     const val TASK_GROUPS = "task_groups"
     const val TASK_GROUP_DETAILS = "task_group_details"
     const val TEMPLATES = "templates"
+    const val FOCUS = "focus"
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavigation(
     modifier: Modifier = Modifier,
@@ -102,6 +111,9 @@ fun AppNavigation(
     preferencesRepository: UserPreferencesRepository? = null,
     initialTaskId: String? = null,
     onHandledInitialTask: () -> Unit = {},
+    initialNavigateAction: String? = null,
+    initialReviewDate: String? = null,
+    onHandledInitialAction: () -> Unit = {},
     navController: NavHostController = rememberNavController()
 ) {
     val context = LocalContext.current
@@ -113,7 +125,9 @@ fun AppNavigation(
     val dailyScoreRepository = remember { com.example.data.repository.DailyScoreRepository(database.dailyScoreDao()) }
     val xpRepository = remember { com.example.data.repository.XpRepository(database.xpEventDao()) }
     val personalBestRepository = remember { com.example.data.repository.PersonalBestRepository(database.personalBestDao()) }
-    val viewModel: ActivityTaskViewModel = viewModel(factory = ActivityTaskViewModelFactory(repository, categoryRepository, taskGroupRepository, templateRepository, dailyScoreRepository, xpRepository, personalBestRepository, context))
+    val endOfDayReviewRepository = remember { com.example.data.repository.EndOfDayReviewRepository(database.endOfDayReviewDao()) }
+    val focusSessionRepository = remember { com.example.data.repository.FocusSessionRepository(database.focusSessionDao()) }
+    val viewModel: ActivityTaskViewModel = viewModel(factory = ActivityTaskViewModelFactory(repository, categoryRepository, taskGroupRepository, templateRepository, dailyScoreRepository, xpRepository, personalBestRepository, endOfDayReviewRepository, focusSessionRepository, context))
 
     val prefsRepo = remember(context) { preferencesRepository ?: UserPreferencesRepository(context) }
     val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(prefsRepo, context))
@@ -127,10 +141,44 @@ fun AppNavigation(
         }
     }
 
+    var activeReviewDate by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(initialTaskId) {
         if (!initialTaskId.isNullOrBlank()) {
             navController.navigate("${Routes.TASK_DETAILS}?taskId=$initialTaskId")
             onHandledInitialTask()
+        }
+    }
+
+    LaunchedEffect(initialNavigateAction, initialReviewDate) {
+        when (initialNavigateAction) {
+            "END_OF_DAY_REVIEW" -> {
+                navController.navigate(Routes.TODAY) {
+                    popUpTo(navController.graph.findStartDestination().id) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                activeReviewDate = initialReviewDate ?: java.time.LocalDate.now().toString()
+                onHandledInitialAction()
+            }
+            "ADD_TASK" -> {
+                navController.navigate(Routes.ADD_TASK) {
+                    launchSingleTop = true
+                }
+                onHandledInitialAction()
+            }
+            "TODAY", "HOME" -> {
+                navController.navigate(Routes.TODAY) {
+                    popUpTo(navController.graph.findStartDestination().id) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                onHandledInitialAction()
+            }
         }
     }
 
@@ -307,18 +355,31 @@ fun AppNavigation(
             }
         }
     ) { innerPadding ->
-        fun getTabOrder(route: String?): Int {
-            return when (route) {
-                Routes.TODAY -> 0
-                Routes.HISTORY -> 1
-                Routes.ANALYTICS -> 2
-                Routes.SETTINGS -> 3
-                else -> -1
-            }
+        fun isMainTabRoute(route: String?): Boolean {
+            val clean = route?.substringBefore("?") ?: return false
+            return clean == Routes.TODAY || clean == Routes.HISTORY || clean == Routes.ANALYTICS || clean == Routes.SETTINGS
+        }
+
+        fun isAddTaskRoute(route: String?): Boolean {
+            val clean = route?.substringBefore("?") ?: return false
+            return clean == Routes.ADD_TASK
+        }
+
+        fun isTaskDetailsRoute(route: String?): Boolean {
+            val clean = route?.substringBefore("?") ?: return false
+            return clean == Routes.TASK_DETAILS
         }
 
         val density = context.resources.displayMetrics.density
-        val moveOffset = (16 * density).toInt()
+
+        fun navigateSingle(route: String) {
+            val currentRoute = navController.currentDestination?.route
+            if (currentRoute != route) {
+                navController.navigate(route) {
+                    launchSingleTop = true
+                }
+            }
+        }
 
         val activePbToast by viewModel.activePersonalBestToast.collectAsStateWithLifecycle()
 
@@ -328,145 +389,288 @@ fun AppNavigation(
                 startDestination = startRoute,
                 modifier = Modifier.padding(innerPadding),
                 enterTransition = {
-                val initialOrder = getTabOrder(initialState.destination.route)
-                val targetOrder = getTabOrder(targetState.destination.route)
-                if (initialOrder != -1 && targetOrder != -1) {
-                    val direction = if (targetOrder > initialOrder) moveOffset else -moveOffset
-                    slideInHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { direction } +
-                            fadeIn(animationSpec = tween(240, easing = LinearOutSlowInEasing))
-                } else {
-                    fadeIn(animationSpec = tween(240, easing = LinearOutSlowInEasing)) +
-                            slideInHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { moveOffset }
-                }
-            },
-            exitTransition = {
-                val initialOrder = getTabOrder(initialState.destination.route)
-                val targetOrder = getTabOrder(targetState.destination.route)
-                if (initialOrder != -1 && targetOrder != -1) {
-                    val direction = if (targetOrder > initialOrder) -moveOffset else moveOffset
-                    slideOutHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { direction } +
-                            fadeOut(animationSpec = tween(240, easing = FastOutLinearInEasing))
-                } else {
-                    fadeOut(animationSpec = tween(240, easing = FastOutLinearInEasing)) +
-                            slideOutHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { -moveOffset }
-                }
-            },
-            popEnterTransition = {
-                fadeIn(animationSpec = tween(240, easing = LinearOutSlowInEasing)) +
-                        slideInHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { -moveOffset }
-            },
-            popExitTransition = {
-                fadeOut(animationSpec = tween(240, easing = FastOutLinearInEasing)) +
-                        slideOutHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { moveOffset }
-            }
-        ) {
-            composable(Routes.TODAY) {
-                HomeScreen(
-                    viewModel = viewModel,
-                    showCompletedOnToday = userPreferences.showCompletedOnToday,
-                    startWeekOnMonday = userPreferences.startWeekOnMonday,
-                    themeMode = userPreferences.themeMode,
-                    onAddTaskClick = { navController.navigate(Routes.ADD_TASK) },
-                    onEditTaskClick = { taskId -> navController.navigate("${Routes.ADD_TASK}?taskId=$taskId") },
-                    onTaskClick = { taskId -> navController.navigate("${Routes.TASK_DETAILS}?taskId=$taskId") },
-                    onNavigateToTemplates = { navController.navigate(Routes.TEMPLATES) }
-                )
-            }
-            composable(Routes.HISTORY) {
-                HistoryScreen(
-                    viewModel = viewModel,
-                    onTaskClick = { taskId -> navController.navigate("${Routes.TASK_DETAILS}?taskId=$taskId") }
-                )
-            }
-            composable(Routes.ANALYTICS) {
-                AnalyticsScreen(
-                    viewModel = viewModel,
-                    themeMode = userPreferences.themeMode,
-                    onNavigateToHistory = {
-                        navController.navigate(Routes.HISTORY) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
+                    val initialRoute = initialState.destination.route
+                    val targetRoute = targetState.destination.route
+                    when {
+                        // 1. Add Task Enter: alpha 0f -> 1f, translationY 20.dp -> 0.dp, scale 0.985f -> 1f, duration 280ms
+                        isAddTaskRoute(targetRoute) -> {
+                            fadeIn(animationSpec = tween(280, easing = FastOutSlowInEasing)) +
+                                    slideInVertically(
+                                        initialOffsetY = { (20 * density).toInt() },
+                                        animationSpec = tween(280, easing = FastOutSlowInEasing)
+                                    ) +
+                                    scaleIn(
+                                        initialScale = 0.985f,
+                                        animationSpec = tween(280, easing = FastOutSlowInEasing)
+                                    )
+                        }
+                        // 2. Task Details Enter: fadeIn 220ms, small horizontal movement 8-12% (10%) from right
+                        isTaskDetailsRoute(targetRoute) -> {
+                            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                                    slideInHorizontally(
+                                        initialOffsetX = { (it * 0.10f).toInt() },
+                                        animationSpec = tween(220, easing = FastOutSlowInEasing)
+                                    )
+                        }
+                        // 3. Bottom nav screen switching: alpha 0 -> 1, translationY 8.dp -> 0.dp, duration 220ms
+                        isMainTabRoute(initialRoute) && isMainTabRoute(targetRoute) -> {
+                            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                                    slideInVertically(
+                                        initialOffsetY = { (8 * density).toInt() },
+                                        animationSpec = tween(220, easing = FastOutSlowInEasing)
+                                    )
+                        }
+                        // General screen entering:
+                        else -> {
+                            fadeIn(animationSpec = tween(240, easing = FastOutSlowInEasing)) +
+                                    slideInHorizontally(
+                                        initialOffsetX = { (it * 0.08f).toInt() },
+                                        animationSpec = tween(240, easing = FastOutSlowInEasing)
+                                    )
                         }
                     }
-                )
+                },
+                exitTransition = {
+                    val initialRoute = initialState.destination.route
+                    val targetRoute = targetState.destination.route
+                    when {
+                        // Leaving for Add Task: Home/previous screen only fades slightly (160ms)
+                        isAddTaskRoute(targetRoute) -> {
+                            fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing))
+                        }
+                        // Leaving for Task Details: fadeOut 160ms
+                        isTaskDetailsRoute(targetRoute) -> {
+                            fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing))
+                        }
+                        // 3. Bottom nav screen switching: alpha 1 -> 0, translationY 0 -> -4.dp, duration 160ms
+                        isMainTabRoute(initialRoute) && isMainTabRoute(targetRoute) -> {
+                            fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
+                                    slideOutVertically(
+                                        targetOffsetY = { (-4 * density).toInt() },
+                                        animationSpec = tween(160, easing = FastOutSlowInEasing)
+                                    )
+                        }
+                        // General screen leaving:
+                        else -> {
+                            fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing))
+                        }
+                    }
+                },
+                popEnterTransition = {
+                    val initialRoute = initialState.destination.route
+                    val targetRoute = targetState.destination.route
+                    when {
+                        // Returning from Add Task to previous screen (e.g. Home): fadeIn 240ms
+                        isAddTaskRoute(initialRoute) -> {
+                            fadeIn(animationSpec = tween(240, easing = FastOutSlowInEasing))
+                        }
+                        // Returning from Task Details to previous screen: fadeIn 200ms
+                        isTaskDetailsRoute(initialRoute) -> {
+                            fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing))
+                        }
+                        // Bottom nav pop:
+                        isMainTabRoute(initialRoute) && isMainTabRoute(targetRoute) -> {
+                            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                                    slideInVertically(
+                                        initialOffsetY = { (8 * density).toInt() },
+                                        animationSpec = tween(220, easing = FastOutSlowInEasing)
+                                    )
+                        }
+                        // General pop enter:
+                        else -> {
+                            fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing))
+                        }
+                    }
+                },
+                popExitTransition = {
+                    val initialRoute = initialState.destination.route
+                    val targetRoute = targetState.destination.route
+                    when {
+                        // Leaving Add Task on Back: reverse naturally: fadeOut, slideOutVertically (20.dp), scaleOut (0.985f), 240ms
+                        isAddTaskRoute(initialRoute) -> {
+                            fadeOut(animationSpec = tween(240, easing = FastOutSlowInEasing)) +
+                                    slideOutVertically(
+                                        targetOffsetY = { (20 * density).toInt() },
+                                        animationSpec = tween(240, easing = FastOutSlowInEasing)
+                                    ) +
+                                    scaleOut(
+                                        targetScale = 0.985f,
+                                        animationSpec = tween(240, easing = FastOutSlowInEasing)
+                                    )
+                        }
+                        // Leaving Task Details on Back: reverse smoothly: fadeOut 200ms + slideOutHorizontally 8-12%
+                        isTaskDetailsRoute(initialRoute) -> {
+                            fadeOut(animationSpec = tween(200, easing = FastOutSlowInEasing)) +
+                                    slideOutHorizontally(
+                                        targetOffsetX = { (it * 0.10f).toInt() },
+                                        animationSpec = tween(200, easing = FastOutSlowInEasing)
+                                    )
+                        }
+                        // Bottom nav pop exit:
+                        isMainTabRoute(initialRoute) && isMainTabRoute(targetRoute) -> {
+                            fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
+                                    slideOutVertically(
+                                        targetOffsetY = { (-4 * density).toInt() },
+                                        animationSpec = tween(160, easing = FastOutSlowInEasing)
+                                    )
+                        }
+                        // General pop exit:
+                        else -> {
+                            fadeOut(animationSpec = tween(200, easing = FastOutSlowInEasing)) +
+                                    slideOutHorizontally(
+                                        targetOffsetX = { (it * 0.08f).toInt() },
+                                        animationSpec = tween(200, easing = FastOutSlowInEasing)
+                                    )
+                        }
+                    }
+                }
+            ) {
+                composable(Routes.TODAY) {
+                    HomeScreen(
+                        viewModel = viewModel,
+                        showCompletedOnToday = userPreferences.showCompletedOnToday,
+                        startWeekOnMonday = userPreferences.startWeekOnMonday,
+                        themeMode = userPreferences.themeMode,
+                        onAddTaskClick = { navigateSingle(Routes.ADD_TASK) },
+                        onEditTaskClick = { taskId -> navigateSingle("${Routes.ADD_TASK}?taskId=$taskId") },
+                        onTaskClick = { taskId -> navigateSingle("${Routes.TASK_DETAILS}?taskId=$taskId") },
+                        onNavigateToTemplates = { navigateSingle(Routes.TEMPLATES) }
+                    )
+                }
+                composable(Routes.HISTORY) {
+                    HistoryScreen(
+                        viewModel = viewModel,
+                        onTaskClick = { taskId -> navigateSingle("${Routes.TASK_DETAILS}?taskId=$taskId") }
+                    )
+                }
+                composable(Routes.ANALYTICS) {
+                    AnalyticsScreen(
+                        viewModel = viewModel,
+                        themeMode = userPreferences.themeMode,
+                        onNavigateToHistory = {
+                            navController.navigate(Routes.HISTORY) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+                composable(Routes.SETTINGS) {
+                    SettingsScreen(
+                        viewModel = settingsViewModel,
+                        contentPadding = innerPadding,
+                        onNavigateToTaskGroups = { navigateSingle(Routes.TASK_GROUPS) },
+                        onNavigateToTemplates = { navigateSingle(Routes.TEMPLATES) }
+                    )
+                }
+                composable(Routes.TEMPLATES) {
+                    com.example.ui.template.TemplatesScreen(
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+                composable(Routes.TASK_GROUPS) {
+                    com.example.ui.taskgroup.TaskGroupScreen(
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() },
+                        onGroupClick = { groupId -> navigateSingle("${Routes.TASK_GROUP_DETAILS}/$groupId") },
+                        themeMode = userPreferences.themeMode
+                    )
+                }
+                composable(
+                    route = "${Routes.TASK_GROUP_DETAILS}/{groupId}",
+                    arguments = listOf(androidx.navigation.navArgument("groupId") {
+                        type = androidx.navigation.NavType.StringType
+                        nullable = false
+                    })
+                ) { backStackEntry ->
+                    val groupId = backStackEntry.arguments?.getString("groupId") ?: return@composable
+                    com.example.ui.taskgroup.TaskGroupDetailsScreen(
+                        groupId = groupId,
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() },
+                        onEditTaskClick = { id -> navigateSingle("${Routes.ADD_TASK}?taskId=$id") },
+                        themeMode = userPreferences.themeMode
+                    )
+                }
+                composable(
+                    route = "${Routes.TASK_DETAILS}?taskId={taskId}",
+                    arguments = listOf(androidx.navigation.navArgument("taskId") {
+                        type = androidx.navigation.NavType.StringType
+                        nullable = false
+                    })
+                ) { backStackEntry ->
+                    val taskId = backStackEntry.arguments?.getString("taskId") ?: return@composable
+                    com.example.ui.taskdetails.TaskDetailsScreen(
+                        taskId = taskId,
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() },
+                        onEditTask = { id -> navigateSingle("${Routes.ADD_TASK}?taskId=$id") },
+                        onStartFocus = { id -> navigateSingle("${Routes.FOCUS}?taskId=$id") }
+                    )
+                }
+                composable(
+                    route = "${Routes.FOCUS}?taskId={taskId}",
+                    arguments = listOf(androidx.navigation.navArgument("taskId") {
+                        type = androidx.navigation.NavType.StringType
+                        nullable = false
+                    })
+                ) { backStackEntry ->
+                    val taskId = backStackEntry.arguments?.getString("taskId") ?: return@composable
+                    com.example.ui.focus.FocusScreen(
+                        taskId = taskId,
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() },
+                        themeMode = userPreferences.themeMode
+                    )
+                }
+                composable(
+                    route = "${Routes.ADD_TASK}?taskId={taskId}",
+                    arguments = listOf(androidx.navigation.navArgument("taskId") {
+                        type = androidx.navigation.NavType.StringType
+                        nullable = true
+                    })
+                ) { backStackEntry ->
+                    val taskId = backStackEntry.arguments?.getString("taskId")
+                    com.example.ui.addtask.AddTaskScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        viewModel = viewModel,
+                        taskId = taskId,
+                        onNavigateToManageGroups = { navigateSingle(Routes.TASK_GROUPS) }
+                    )
+                }
             }
-            composable(Routes.SETTINGS) {
-                SettingsScreen(
-                    viewModel = settingsViewModel,
-                    contentPadding = innerPadding,
-                    onNavigateToTaskGroups = { navController.navigate(Routes.TASK_GROUPS) },
-                    onNavigateToTemplates = { navController.navigate(Routes.TEMPLATES) }
-                )
-            }
-            composable(Routes.TEMPLATES) {
-                com.example.ui.template.TemplatesScreen(
-                    viewModel = viewModel,
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-            composable(Routes.TASK_GROUPS) {
-                com.example.ui.taskgroup.TaskGroupScreen(
-                    viewModel = viewModel,
-                    onNavigateBack = { navController.popBackStack() },
-                    onGroupClick = { groupId -> navController.navigate("${Routes.TASK_GROUP_DETAILS}/$groupId") },
-                    themeMode = userPreferences.themeMode
-                )
-            }
-            composable(
-                route = "${Routes.TASK_GROUP_DETAILS}/{groupId}",
-                arguments = listOf(androidx.navigation.navArgument("groupId") {
-                    type = androidx.navigation.NavType.StringType
-                    nullable = false
-                })
-            ) { backStackEntry ->
-                val groupId = backStackEntry.arguments?.getString("groupId") ?: return@composable
-                com.example.ui.taskgroup.TaskGroupDetailsScreen(
-                    groupId = groupId,
-                    viewModel = viewModel,
-                    onNavigateBack = { navController.popBackStack() },
-                    onEditTaskClick = { id -> navController.navigate("${Routes.ADD_TASK}?taskId=$id") },
-                    themeMode = userPreferences.themeMode
-                )
-            }
-            composable(
-                route = "${Routes.TASK_DETAILS}?taskId={taskId}",
-                arguments = listOf(androidx.navigation.navArgument("taskId") {
-                    type = androidx.navigation.NavType.StringType
-                    nullable = false
-                })
-            ) { backStackEntry ->
-                val taskId = backStackEntry.arguments?.getString("taskId") ?: return@composable
-                com.example.ui.taskdetails.TaskDetailsScreen(
-                    taskId = taskId,
-                    viewModel = viewModel,
-                    onNavigateBack = { navController.popBackStack() },
-                    onEditTask = { id -> navController.navigate("${Routes.ADD_TASK}?taskId=$id") }
-                )
-            }
-            composable(
-                route = "${Routes.ADD_TASK}?taskId={taskId}",
-                arguments = listOf(androidx.navigation.navArgument("taskId") {
-                    type = androidx.navigation.NavType.StringType
-                    nullable = true
-                })
-            ) { backStackEntry ->
-                val taskId = backStackEntry.arguments?.getString("taskId")
-                com.example.ui.addtask.AddTaskScreen(
-                    onNavigateBack = { navController.popBackStack() },
-                    viewModel = viewModel,
-                    taskId = taskId,
-                    onNavigateToManageGroups = { navController.navigate(Routes.TASK_GROUPS) }
-                )
-            }
-        }
 
         PersonalBestOverlay(
             toastData = activePbToast,
             onDismiss = { key -> viewModel.dismissPersonalBestToast(key) }
         )
+
+        activeReviewDate?.let { reviewDate ->
+            val reviewSummary = remember(reviewDate, viewModel) {
+                viewModel.getDaySummaryForReview(reviewDate)
+            }
+            val allReviews by viewModel.allEndOfDayReviews.collectAsStateWithLifecycle()
+            val existingReview = allReviews.find { it.date == reviewDate }
+            com.example.ui.components.EndOfDayReviewSheet(
+                summary = reviewSummary,
+                existingReview = existingReview,
+                onSaveReview = { review ->
+                    viewModel.saveEndOfDayReview(review)
+                    activeReviewDate = null
+                },
+                onDeleteReview = {
+                    viewModel.deleteEndOfDayReviewForDate(reviewDate)
+                    activeReviewDate = null
+                },
+                onDismiss = {
+                    activeReviewDate = null
+                }
+            )
+        }
     }
 }
 }

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.PendingActions
 import androidx.compose.material.icons.rounded.ShowChart
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Star
@@ -132,6 +133,8 @@ fun AnalyticsScreen(
     val xpThisWeek by viewModel.xpThisWeek.collectAsStateWithLifecycle()
     val xpThisMonth by viewModel.xpThisMonth.collectAsStateWithLifecycle()
     val allXpEvents by viewModel.allXpEvents.collectAsStateWithLifecycle()
+    val allEndOfDayReviews by viewModel.allEndOfDayReviews.collectAsStateWithLifecycle()
+    val focusAnalytics by viewModel.focusAnalyticsData.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val zoneId = remember { ZoneId.systemDefault() }
 
@@ -331,6 +334,13 @@ fun AnalyticsScreen(
                     isShadowMonarch = isShadowMonarch
                 )
 
+                // Focus Time Card
+                FocusAnalyticsCard(
+                    focusAnalytics = focusAnalytics,
+                    cardBorder = cardBorder,
+                    isShadowMonarch = isShadowMonarch
+                )
+
                 // Today's Progress Hero Card
                 Card(
                     modifier = Modifier
@@ -425,6 +435,13 @@ fun AnalyticsScreen(
                 // Personal Bests Analytics Card
                 PersonalBestsAnalyticsCard(
                     personalBests = allPersonalBests,
+                    cardBorder = cardBorder,
+                    isShadowMonarch = isShadowMonarch
+                )
+
+                // End-of-Day Obstacles & Friction Analytics Card
+                EndOfDayObstaclesAnalyticsCard(
+                    reviews = allEndOfDayReviews,
                     cardBorder = cardBorder,
                     isShadowMonarch = isShadowMonarch
                 )
@@ -2273,6 +2290,135 @@ private fun InsightItemRow(
                         text = "${insight.dataCount} data points",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusAnalyticsCard(
+    focusAnalytics: com.example.domain.FocusAnalyticsData,
+    cardBorder: BorderStroke,
+    isShadowMonarch: Boolean
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(cardBorder, RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isShadowMonarch) Color(0xFF2B2544) else MaterialTheme.colorScheme.primaryContainer
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Timer,
+                            contentDescription = null,
+                            tint = if (isShadowMonarch) Color(0xFF7967E8) else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Text(
+                        text = "Focus Time",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                if (focusAnalytics.totalSessionsCount > 0) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isShadowMonarch) Color(0xFF202638) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    ) {
+                        Text(
+                            text = "${focusAnalytics.totalSessionsCount} sessions",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            // 3-Column Stats: Focus today, Focus this week, Average session
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Focus today
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = "Focus today",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = focusAnalytics.focusTodayFormatted,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = if (isShadowMonarch) Color(0xFF7967E8) else MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Focus this week
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Focus this week",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = focusAnalytics.focusWeekFormatted,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // Average session
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = "Average session",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = focusAnalytics.averageSessionFormatted,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }

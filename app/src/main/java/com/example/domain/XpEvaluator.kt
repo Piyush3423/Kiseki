@@ -133,4 +133,29 @@ object XpEvaluator {
 
         return newEvents
     }
+
+    const val EVENT_FOCUS_BONUS = "FOCUS_BONUS"
+    const val MAX_DAILY_FOCUS_XP = 20
+    const val FOCUS_SESSION_MIN_MS_FOR_XP = 25 * 60 * 1000L // 25 minutes
+
+    fun evaluateFocusSessionXp(
+        durationMs: Long,
+        taskId: String,
+        date: String,
+        existingFocusEventsToday: List<XpEvent>
+    ): XpEvent? {
+        if (durationMs < FOCUS_SESSION_MIN_MS_FOR_XP) return null
+        val currentTotalToday = existingFocusEventsToday.sumOf { it.amount }
+        if (currentTotalToday >= MAX_DAILY_FOCUS_XP) return null
+
+        val awardAmount = minOf(5, MAX_DAILY_FOCUS_XP - currentTotalToday)
+        if (awardAmount <= 0) return null
+
+        return XpEvent(
+            amount = awardAmount,
+            eventType = EVENT_FOCUS_BONUS,
+            taskId = taskId,
+            date = date
+        )
+    }
 }

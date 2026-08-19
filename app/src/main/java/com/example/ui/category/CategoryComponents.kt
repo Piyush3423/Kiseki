@@ -51,6 +51,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import com.example.ui.theme.pressScale
 import androidx.compose.ui.window.Dialog
 import com.example.data.entity.Category
 
@@ -234,7 +242,15 @@ fun ManageCategoriesDialog(
                     },
                     label = { Text("Category Name") },
                     isError = addErrorText != null,
-                    supportingText = addErrorText?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                    supportingText = {
+                        AnimatedVisibility(
+                            visible = addErrorText != null,
+                            enter = fadeIn(tween(180, easing = FastOutSlowInEasing)) + expandVertically(tween(180, easing = FastOutSlowInEasing)),
+                            exit = fadeOut(tween(140, easing = FastOutSlowInEasing)) + shrinkVertically(tween(140, easing = FastOutSlowInEasing))
+                        ) {
+                            Text(addErrorText ?: "", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -294,7 +310,7 @@ fun ManageCategoriesDialog(
                         newCategoryName = ""
                         addErrorText = null
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().pressScale(0.98f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))

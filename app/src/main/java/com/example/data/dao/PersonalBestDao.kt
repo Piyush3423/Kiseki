@@ -21,6 +21,12 @@ interface PersonalBestDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(record: PersonalBest)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(records: List<PersonalBest>)
+
     @Query("UPDATE personal_bests SET acknowledged = 1 WHERE recordKey = :key")
     suspend fun markAcknowledged(key: String)
+
+    @Query("DELETE FROM personal_bests")
+    suspend fun deleteAllRecords()
 }

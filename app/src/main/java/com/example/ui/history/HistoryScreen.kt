@@ -1,5 +1,6 @@
 package com.example.ui.history
 
+import com.example.ui.theme.pressScale
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -7,6 +8,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -571,7 +574,12 @@ fun HistoryScreen(
                             task = task,
                             timeFormatter = timeFormatter,
                             zoneId = zoneId,
-                            onClick = { onTaskClick(task.id) }
+                            onClick = { onTaskClick(task.id) },
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                fadeOutSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                                placementSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                            )
                         )
                     }
                 }
@@ -759,6 +767,7 @@ private fun HistoryTaskCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .pressScale(0.985f)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }

@@ -32,4 +32,7 @@ interface XpEventDao {
 
     @Query("DELETE FROM xp_events WHERE taskId = :taskId")
     suspend fun deleteEventsForTask(taskId: String)
+
+    @Query("DELETE FROM xp_events")
+    suspend fun deleteAllEvents()
 }

@@ -1,14 +1,19 @@
 package com.example.ui.taskdetails
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,45 +41,157 @@ fun TaskDetailsScreen(
     viewModel: ActivityTaskViewModel,
     onNavigateBack: () -> Unit,
     onEditTask: (String) -> Unit,
+    onStartFocus: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val task by viewModel.getTaskById(taskId).collectAsStateWithLifecycle()
-    var showDeleteDialog by remember { mutableStateOf(false) }
+    val uiState by viewModel.getTaskDetailsUiState(taskId).collectAsStateWithLifecycle()
 
-    if (task == null) {
-        // Handle missing task
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Task Details") },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
-                    )
-                )
-            }
-        ) { paddingValues ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Task not found or has been deleted.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+    when (val state = uiState) {
+        TaskDetailsUiState.Loading -> {
+            TaskDetailsLoadingState(onNavigateBack = onNavigateBack)
         }
-        return
+        is TaskDetailsUiState.Success -> {
+            TaskDetailsContent(
+                task = state.task,
+                viewModel = viewModel,
+                onNavigateBack = onNavigateBack,
+                onEditTask = onEditTask,
+                onStartFocus = onStartFocus,
+                modifier = modifier
+            )
+        }
+        TaskDetailsUiState.NotFound -> {
+            TaskDetailsNotFoundState(onNavigateBack = onNavigateBack)
+        }
+        is TaskDetailsUiState.Error -> {
+            TaskDetailsErrorState(
+                message = state.message,
+                onNavigateBack = onNavigateBack
+            )
+        }
     }
+}
 
-    val currentTask = task!!
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TaskDetailsLoadingState(
+    onNavigateBack: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Task Details") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(32.dp),
+                strokeWidth = 2.5.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TaskDetailsNotFoundState(
+    onNavigateBack: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Task Details") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Task not found or has been deleted.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TaskDetailsErrorState(
+    message: String,
+    onNavigateBack: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Task Details") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TaskDetailsContent(
+    task: com.example.data.entity.ActivityTask,
+    viewModel: ActivityTaskViewModel,
+    onNavigateBack: () -> Unit,
+    onEditTask: (String) -> Unit,
+    onStartFocus: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -94,7 +211,7 @@ fun TaskDetailsScreen(
             },
             text = {
                 Text(
-                    text = "Are you sure you want to permanently delete '${currentTask.title}'?\nThis action cannot be undone.",
+                    text = "Are you sure you want to permanently delete '${task.title}'?\nThis action cannot be undone.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -102,7 +219,7 @@ fun TaskDetailsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteTask(currentTask)
+                        viewModel.deleteTask(task)
                         showDeleteDialog = false
                         onNavigateBack()
                     },
@@ -133,11 +250,14 @@ fun TaskDetailsScreen(
                 title = { Text("Task Details") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { onEditTask(currentTask.id) }) {
+                    IconButton(onClick = { onStartFocus(task.id) }) {
+                        Icon(Icons.Rounded.Timer, contentDescription = "Start Focus", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { onEditTask(task.id) }) {
                         Icon(Icons.Rounded.Edit, contentDescription = "Edit Task")
                     }
                     IconButton(onClick = { showDeleteDialog = true }) {
@@ -158,8 +278,66 @@ fun TaskDetailsScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+            // Start Focus Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onStartFocus(task.id) },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayArrow,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "Start Focus",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "Enter minimal, distraction-free timer",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                        contentDescription = "Start Focus",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
             // Title and Status
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -167,23 +345,23 @@ fun TaskDetailsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = currentTask.title,
+                    text = task.title,
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.Bold,
-                        textDecoration = if (currentTask.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                        textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                     ),
-                    color = if (currentTask.isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
+                    color = if (task.isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
                 
                 Checkbox(
-                    checked = currentTask.isCompleted,
-                    onCheckedChange = { viewModel.updateTask(currentTask.copy(isCompleted = it)) }
+                    checked = task.isCompleted,
+                    onCheckedChange = { viewModel.updateTask(task.copy(isCompleted = it)) }
                 )
             }
 
             // Description
-            if (!currentTask.description.isNullOrBlank()) {
+            if (!task.description.isNullOrBlank()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "Description",
@@ -191,7 +369,7 @@ fun TaskDetailsScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = currentTask.description!!,
+                        text = task.description!!,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -208,8 +386,8 @@ fun TaskDetailsScreen(
                     .padding(16.dp)
             ) {
                 // Category
-                if (currentTask.category.isNotBlank()) {
-                    DetailRow(label = "Category", value = currentTask.category)
+                if (task.category.isNotBlank()) {
+                    DetailRow(label = "Category", value = task.category)
                 }
                 
                 // Priority
@@ -223,7 +401,7 @@ fun TaskDetailsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    val priorityColor = when (currentTask.priority) {
+                    val priorityColor = when (task.priority) {
                         Priority.High -> Color(0xFFB3261E)
                         Priority.Medium -> Color(0xFFF29900)
                         Priority.Low -> Color(0xFF1D9BF0)
@@ -235,35 +413,47 @@ fun TaskDetailsScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = currentTask.priority.name,
+                            text = task.priority.name,
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = priorityColor
                         )
                     }
                 }
+
+                // Estimated Duration (if entered by user)
+                if (task.estimatedDurationMinutes != null && task.estimatedDurationMinutes > 0) {
+                    val durationStr = if (task.estimatedDurationMinutes >= 60) {
+                        val hours = task.estimatedDurationMinutes / 60
+                        val mins = task.estimatedDurationMinutes % 60
+                        if (mins > 0) "${hours}h ${mins}m" else "${hours}h"
+                    } else {
+                        "${task.estimatedDurationMinutes} min"
+                    }
+                    DetailRow(label = "Estimated Duration", value = durationStr)
+                }
                 
                 // Due Date
-                if (currentTask.dueDate != null) {
+                if (task.dueDate != null) {
                     val dateFormat = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
-                    val dateString = dateFormat.format(Date(currentTask.dueDate!!))
+                    val dateString = dateFormat.format(Date(task.dueDate!!))
                     DetailRow(label = "Due Date", value = dateString)
                 }
 
                 // Reminder
-                if (currentTask.isReminderEnabled && currentTask.reminderTime != null) {
+                if (task.isReminderEnabled && task.reminderTime != null) {
                     val reminderFormat = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
-                    val reminderString = reminderFormat.format(Date(currentTask.reminderTime!!))
+                    val reminderString = reminderFormat.format(Date(task.reminderTime!!))
                     DetailRow(label = "Reminder", value = reminderString)
                 }
                 
                 // Repeat Type
-                if (currentTask.repeatType.name != "None") {
-                    DetailRow(label = "Repeat", value = currentTask.repeatType.name)
+                if (task.repeatType.name != "None") {
+                    DetailRow(label = "Repeat", value = task.repeatType.name)
                 }
 
                 // Created At
                 val createdFormat = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
-                val createdString = createdFormat.format(Date(currentTask.createdAt))
+                val createdString = createdFormat.format(Date(task.createdAt))
                 DetailRow(label = "Created On", value = createdString)
             }
         }

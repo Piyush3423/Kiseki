@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Kiseki</string>
+    <string name="widget_today_label">Kiseki Today</string>
+    <string name="today_widget_description">Today\'s progress, completion percentage, and upcoming task.</string>
+    <string name="widget_quick_task_label">Quick Task</string>
+    <string name="quick_task_widget_description">Instantly add a new task to Kiseki.</string>
 </resources>

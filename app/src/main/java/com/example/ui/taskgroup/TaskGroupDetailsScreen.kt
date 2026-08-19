@@ -1,5 +1,7 @@
 package com.example.ui.taskgroup
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -337,22 +339,25 @@ fun TaskGroupDetailsScreen(
                         items = groupTasks,
                         key = { it.id }
                     ) { task ->
-                        Column {
-                            TaskItemCard(
-                                task = task,
-                                categories = dbCategories,
-                                groups = groups,
-                                onToggleComplete = {
-                                    viewModel.updateTask(it.copy(isCompleted = !it.isCompleted))
-                                },
-                                onDelete = { taskToDelete = it },
-                                onEdit = { onEditTaskClick(it.id) },
-                                themeMode = themeMode,
-                                onRemoveFromGroup = {
-                                    viewModel.removeTaskFromGroup(task.id)
-                                }
-                            )
-                        }
+                        TaskItemCard(
+                            task = task,
+                            categories = dbCategories,
+                            groups = groups,
+                            onToggleComplete = {
+                                viewModel.updateTask(it.copy(isCompleted = !it.isCompleted))
+                            },
+                            onDelete = { taskToDelete = it },
+                            onEdit = { onEditTaskClick(it.id) },
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                fadeOutSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                                placementSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                            ),
+                            themeMode = themeMode,
+                            onRemoveFromGroup = {
+                                viewModel.removeTaskFromGroup(task.id)
+                            }
+                        )
                     }
                 }
             }

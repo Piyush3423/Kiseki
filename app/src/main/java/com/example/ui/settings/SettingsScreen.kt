@@ -5,7 +5,14 @@ import com.example.ui.components.KisekiLogoBadge
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import com.example.ui.theme.pressScale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,8 +49,10 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.NightlightRound
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SettingsBrightness
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Upload
@@ -400,7 +409,7 @@ fun SettingsScreen(
             }
 
             // Notifications Section
-            SettingsSectionCard(title = "Notifications", icon = Icons.Rounded.Notifications) {
+            SettingsSectionCard(title = "Notifications & Review", icon = Icons.Rounded.Notifications) {
                 SettingToggleItem(
                     title = "Enable Reminder Notifications",
                     subtitle = "Receive timely alerts for scheduled tasks and due dates",
@@ -408,6 +417,104 @@ fun SettingsScreen(
                     checked = preferences.enableReminderNotifications,
                     onCheckedChange = { viewModel.setEnableReminderNotifications(it) }
                 )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                )
+
+                SettingToggleItem(
+                    title = "End-of-day review",
+                    subtitle = "Quick evening recap of finished tasks, score, and daily obstacles",
+                    icon = Icons.Rounded.NightlightRound,
+                    checked = preferences.enableEndOfDayReview,
+                    onCheckedChange = { viewModel.setEnableEndOfDayReview(it) }
+                )
+
+                AnimatedVisibility(
+                    visible = preferences.enableEndOfDayReview,
+                    enter = fadeIn(tween(180, easing = FastOutSlowInEasing)) + expandVertically(tween(220, easing = FastOutSlowInEasing)),
+                    exit = fadeOut(tween(120, easing = FastOutSlowInEasing)) + shrinkVertically(tween(180, easing = FastOutSlowInEasing))
+                ) {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val currentHour = preferences.endOfDayReviewTime.split(":").getOrNull(0)?.toIntOrNull() ?: 21
+                    val currentMinute = preferences.endOfDayReviewTime.split(":").getOrNull(1)?.toIntOrNull() ?: 0
+
+                    val formattedTimeDisplay = remember(preferences.endOfDayReviewTime) {
+                        val period = if (currentHour >= 12) "PM" else "AM"
+                        val displayHour = when {
+                            currentHour == 0 -> 12
+                            currentHour > 12 -> currentHour - 12
+                            else -> currentHour
+                        }
+                        String.format(java.util.Locale.getDefault(), "%d:%02d %s", displayHour, currentMinute, period)
+                    }
+
+                    val timePickerDialog = remember(context, preferences.endOfDayReviewTime) {
+                        android.app.TimePickerDialog(
+                            context,
+                            { _, hourOfDay, minute ->
+                                val formatted = String.format(java.util.Locale.US, "%02d:%02d", hourOfDay, minute)
+                                viewModel.setEndOfDayReviewTime(formatted)
+                            },
+                            currentHour,
+                            currentMinute,
+                            false
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { timePickerDialog.show() }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Schedule,
+                                    contentDescription = "Review Time",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Review Time",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Daily scheduled evening reminder",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text(
+                                text = formattedTimeDisplay,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             // Data & Backup Section
@@ -674,14 +781,17 @@ fun ThemeOptionChip(
 ) {
     val containerColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "containerColor"
     )
     val contentColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "contentColor"
     )
     val borderColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "borderColor"
     )
 

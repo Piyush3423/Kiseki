@@ -22,12 +22,16 @@ import com.example.data.repository.UserPreferencesRepository
 
 class MainActivity : ComponentActivity() {
     private var pendingTaskId by mutableStateOf<String?>(null)
+    private var pendingNavigateAction by mutableStateOf<String?>(null)
+    private var pendingReviewDate by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         pendingTaskId = intent?.getStringExtra("NAVIGATE_TASK_ID")
+        pendingNavigateAction = intent?.getStringExtra("NAVIGATE_ACTION")
+        pendingReviewDate = intent?.getStringExtra("REVIEW_DATE")
         val prefsRepository = UserPreferencesRepository(applicationContext)
 
         setContent {
@@ -40,10 +44,26 @@ class MainActivity : ComponentActivity() {
                     userPreferences = userPrefs,
                     preferencesRepository = prefsRepository,
                     initialTaskId = pendingTaskId,
-                    onHandledInitialTask = { pendingTaskId = null }
+                    onHandledInitialTask = { pendingTaskId = null },
+                    initialNavigateAction = pendingNavigateAction,
+                    initialReviewDate = pendingReviewDate,
+                    onHandledInitialAction = {
+                        pendingNavigateAction = null
+                        pendingReviewDate = null
+                    }
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        com.example.widget.KisekiWidgetUpdater.updateAllWidgets(applicationContext)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        com.example.widget.KisekiWidgetUpdater.updateAllWidgets(applicationContext)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -51,6 +71,12 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         intent.getStringExtra("NAVIGATE_TASK_ID")?.let { id ->
             pendingTaskId = id
+        }
+        intent.getStringExtra("NAVIGATE_ACTION")?.let { action ->
+            pendingNavigateAction = action
+        }
+        intent.getStringExtra("REVIEW_DATE")?.let { date ->
+            pendingReviewDate = date
         }
     }
 }

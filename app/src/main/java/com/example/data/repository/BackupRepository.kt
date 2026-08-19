@@ -6,11 +6,17 @@ import androidx.room.withTransaction
 import com.example.data.database.KisekiDatabase
 import com.example.data.entity.ActivityTask
 import com.example.data.entity.Category
+import com.example.data.entity.DailyScore
+import com.example.data.entity.EndOfDayReview
+import com.example.data.entity.FocusSession
+import com.example.data.entity.PersonalBest
 import com.example.data.entity.TaskGroup
 import com.example.data.entity.TaskGroupTemplate
+import com.example.data.entity.XpEvent
 import com.example.data.model.Priority
 import com.example.data.model.RepeatType
 import com.example.util.ReminderScheduler
+import com.example.widget.KisekiWidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -19,10 +25,15 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 data class BackupData(
-    val categories: List<Category>,
-    val tasks: List<ActivityTask>,
+    val categories: List<Category> = emptyList(),
+    val tasks: List<ActivityTask> = emptyList(),
     val groups: List<TaskGroup> = emptyList(),
-    val templates: List<com.example.data.entity.TaskGroupTemplate> = emptyList()
+    val templates: List<TaskGroupTemplate> = emptyList(),
+    val dailyScores: List<DailyScore> = emptyList(),
+    val xpEvents: List<XpEvent> = emptyList(),
+    val personalBests: List<PersonalBest> = emptyList(),
+    val endOfDayReviews: List<EndOfDayReview> = emptyList(),
+    val focusSessions: List<FocusSession> = emptyList()
 )
 
 class BackupRepository(private val context: Context) {
@@ -35,10 +46,15 @@ class BackupRepository(private val context: Context) {
             val categories = db.categoryDao().getAllCategoriesOneShot()
             val groups = db.taskGroupDao().getAllGroupsOneShot()
             val templates = db.taskGroupTemplateDao().getAllTemplatesOneShot()
+            val dailyScores = db.dailyScoreDao().getAllScores()
+            val xpEvents = db.xpEventDao().getAllEvents()
+            val personalBests = db.personalBestDao().getAllRecordsOneShot()
+            val endOfDayReviews = db.endOfDayReviewDao().getAllReviews()
+            val focusSessions = db.focusSessionDao().getAllSessions()
 
             val rootJson = JSONObject().apply {
                 put("app", "Kiseki")
-                put("version", 1)
+                put("version", 2)
                 put("exportedAt", System.currentTimeMillis())
 
                 val categoriesArray = JSONArray()
@@ -97,10 +113,90 @@ class BackupRepository(private val context: Context) {
                         put("isReminderEnabled", task.isReminderEnabled)
                         put("reminderTime", task.reminderTime ?: JSONObject.NULL)
                         put("groupId", task.groupId ?: JSONObject.NULL)
+                        put("rescheduleCount", task.rescheduleCount)
+                        put("missCount", task.missCount)
+                        put("lateCompletionCount", task.lateCompletionCount)
+                        put("frictionScore", task.frictionScore.toDouble())
+                        put("frictionSuppressedUntil", task.frictionSuppressedUntil ?: JSONObject.NULL)
+                        put("estimatedDurationMinutes", task.estimatedDurationMinutes ?: JSONObject.NULL)
                     }
                     tasksArray.put(taskObj)
                 }
                 put("tasks", tasksArray)
+
+                val dailyScoresArray = JSONArray()
+                dailyScores.forEach { ds ->
+                    val dsObj = JSONObject().apply {
+                        put("date", ds.date)
+                        put("score", ds.score)
+                        put("completionScore", ds.completionScore.toDouble())
+                        put("priorityPerformance", ds.priorityPerformance.toDouble())
+                        put("onTimeScore", ds.onTimeScore.toDouble())
+                        put("consistencyScore", ds.consistencyScore.toDouble())
+                    }
+                    dailyScoresArray.put(dsObj)
+                }
+                put("dailyScores", dailyScoresArray)
+
+                val xpEventsArray = JSONArray()
+                xpEvents.forEach { xp ->
+                    val xpObj = JSONObject().apply {
+                        put("id", xp.id)
+                        put("amount", xp.amount)
+                        put("eventType", xp.eventType)
+                        put("timestamp", xp.timestamp)
+                        put("taskId", xp.taskId ?: JSONObject.NULL)
+                        put("date", xp.date)
+                    }
+                    xpEventsArray.put(xpObj)
+                }
+                put("xpEvents", xpEventsArray)
+
+                val pbArray = JSONArray()
+                personalBests.forEach { pb ->
+                    val pbObj = JSONObject().apply {
+                        put("recordKey", pb.recordKey)
+                        put("value", pb.value)
+                        put("dateAchieved", pb.dateAchieved)
+                        put("previousValue", pb.previousValue)
+                        put("acknowledged", pb.acknowledged)
+                    }
+                    pbArray.put(pbObj)
+                }
+                put("personalBests", pbArray)
+
+                val reviewsArray = JSONArray()
+                endOfDayReviews.forEach { rev ->
+                    val revObj = JSONObject().apply {
+                        put("date", rev.date)
+                        put("completedTasks", rev.completedTasks)
+                        put("totalTasks", rev.totalTasks)
+                        put("score", rev.score)
+                        put("rank", rev.rank)
+                        put("xpEarned", rev.xpEarned)
+                        val obsArray = JSONArray()
+                        rev.obstacles.forEach { obsArray.put(it) }
+                        put("obstacles", obsArray)
+                        put("note", rev.note ?: JSONObject.NULL)
+                        put("reviewedAt", rev.reviewedAt)
+                    }
+                    reviewsArray.put(revObj)
+                }
+                put("endOfDayReviews", reviewsArray)
+
+                val sessionsArray = JSONArray()
+                focusSessions.forEach { sess ->
+                    val sessObj = JSONObject().apply {
+                        put("id", sess.id)
+                        put("taskId", sess.taskId)
+                        put("startTime", sess.startTime)
+                        put("endTime", sess.endTime)
+                        put("duration", sess.duration)
+                        put("completed", sess.completed)
+                    }
+                    sessionsArray.put(sessObj)
+                }
+                put("focusSessions", sessionsArray)
             }
 
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
@@ -121,7 +217,7 @@ class BackupRepository(private val context: Context) {
                 }
             } ?: return@withContext Result.failure(Exception("Unable to read selected file"))
 
-            if (jsonString.length > 10_000_000) {
+            if (jsonString.length > 20_000_000) {
                 return@withContext Result.failure(Exception("Backup file exceeds maximum allowed size"))
             }
 
@@ -134,9 +230,6 @@ class BackupRepository(private val context: Context) {
             val categoriesList = mutableListOf<Category>()
             if (rootObj.has("categories")) {
                 val catArray = rootObj.getJSONArray("categories")
-                if (catArray.length() > 1000) {
-                    return@withContext Result.failure(Exception("Too many categories in backup"))
-                }
                 for (i in 0 until catArray.length()) {
                     val catObj = catArray.getJSONObject(i)
                     val id = catObj.optString("id")
@@ -157,9 +250,6 @@ class BackupRepository(private val context: Context) {
             val groupsList = mutableListOf<TaskGroup>()
             if (rootObj.has("groups")) {
                 val groupArray = rootObj.getJSONArray("groups")
-                if (groupArray.length() > 1000) {
-                    return@withContext Result.failure(Exception("Too many groups in backup"))
-                }
                 for (i in 0 until groupArray.length()) {
                     val groupObj = groupArray.getJSONObject(i)
                     val id = groupObj.optString("id")
@@ -181,9 +271,6 @@ class BackupRepository(private val context: Context) {
             val tasksList = mutableListOf<ActivityTask>()
             if (rootObj.has("tasks")) {
                 val taskArray = rootObj.getJSONArray("tasks")
-                if (taskArray.length() > 20000) {
-                    return@withContext Result.failure(Exception("Too many tasks in backup"))
-                }
                 for (i in 0 until taskArray.length()) {
                     val taskObj = taskArray.getJSONObject(i)
                     val id = taskObj.optString("id")
@@ -192,14 +279,14 @@ class BackupRepository(private val context: Context) {
                         val priorityStr = taskObj.optString("priority", "Medium")
                         val priority = try {
                             Priority.valueOf(priorityStr)
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             Priority.Medium
                         }
 
                         val repeatStr = taskObj.optString("repeatType", "None")
                         val repeatType = try {
                             RepeatType.valueOf(repeatStr)
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             RepeatType.None
                         }
 
@@ -209,6 +296,8 @@ class BackupRepository(private val context: Context) {
                         val parentTaskId = if (taskObj.isNull("parentTaskId")) null else taskObj.optString("parentTaskId")
                         val customDays = if (taskObj.isNull("customDays")) null else taskObj.optInt("customDays")
                         val groupId = if (taskObj.isNull("groupId")) null else taskObj.optString("groupId")
+                        val frictionSuppressedUntil = if (taskObj.isNull("frictionSuppressedUntil")) null else taskObj.optLong("frictionSuppressedUntil")
+                        val estimatedDurationMinutes = if (taskObj.isNull("estimatedDurationMinutes")) null else taskObj.optInt("estimatedDurationMinutes")
 
                         tasksList.add(
                             ActivityTask(
@@ -226,7 +315,13 @@ class BackupRepository(private val context: Context) {
                                 customDays = customDays,
                                 isReminderEnabled = taskObj.optBoolean("isReminderEnabled", false),
                                 reminderTime = if (reminderTime == 0L && taskObj.isNull("reminderTime")) null else reminderTime,
-                                groupId = groupId
+                                groupId = groupId,
+                                rescheduleCount = taskObj.optInt("rescheduleCount", 0),
+                                missCount = taskObj.optInt("missCount", 0),
+                                lateCompletionCount = taskObj.optInt("lateCompletionCount", 0),
+                                frictionScore = taskObj.optDouble("frictionScore", 0.0).toFloat(),
+                                frictionSuppressedUntil = frictionSuppressedUntil,
+                                estimatedDurationMinutes = estimatedDurationMinutes
                             )
                         )
                     }
@@ -236,9 +331,6 @@ class BackupRepository(private val context: Context) {
             val templatesList = mutableListOf<TaskGroupTemplate>()
             if (rootObj.has("templates")) {
                 val tmplArray = rootObj.getJSONArray("templates")
-                if (tmplArray.length() > 1000) {
-                    return@withContext Result.failure(Exception("Too many templates in backup"))
-                }
                 for (i in 0 until tmplArray.length()) {
                     val tmplObj = tmplArray.getJSONObject(i)
                     val id = tmplObj.optString("id")
@@ -257,7 +349,150 @@ class BackupRepository(private val context: Context) {
                 }
             }
 
-            Result.success(BackupData(categories = categoriesList, tasks = tasksList, groups = groupsList, templates = templatesList))
+            val dailyScoresList = mutableListOf<DailyScore>()
+            if (rootObj.has("dailyScores")) {
+                val dsArray = rootObj.getJSONArray("dailyScores")
+                for (i in 0 until dsArray.length()) {
+                    val dsObj = dsArray.getJSONObject(i)
+                    val date = dsObj.optString("date")
+                    if (date.isNotBlank()) {
+                        dailyScoresList.add(
+                            DailyScore(
+                                date = date,
+                                score = dsObj.optInt("score", 0),
+                                completionScore = dsObj.optDouble("completionScore", 0.0).toFloat(),
+                                priorityPerformance = dsObj.optDouble("priorityPerformance", 0.0).toFloat(),
+                                onTimeScore = dsObj.optDouble("onTimeScore", 0.0).toFloat(),
+                                consistencyScore = dsObj.optDouble("consistencyScore", 0.0).toFloat()
+                            )
+                        )
+                    }
+                }
+            }
+
+            val xpEventsList = mutableListOf<XpEvent>()
+            if (rootObj.has("xpEvents")) {
+                val xpArray = rootObj.getJSONArray("xpEvents")
+                for (i in 0 until xpArray.length()) {
+                    val xpObj = xpArray.getJSONObject(i)
+                    val id = xpObj.optString("id")
+                    val eventType = xpObj.optString("eventType")
+                    val date = xpObj.optString("date")
+                    if (id.isNotBlank() && eventType.isNotBlank() && date.isNotBlank()) {
+                        xpEventsList.add(
+                            XpEvent(
+                                id = id,
+                                amount = xpObj.optInt("amount", 0),
+                                eventType = eventType,
+                                timestamp = xpObj.optLong("timestamp", System.currentTimeMillis()),
+                                taskId = if (xpObj.isNull("taskId")) null else xpObj.optString("taskId"),
+                                date = date
+                            )
+                        )
+                    }
+                }
+            }
+
+            val personalBestsList = mutableListOf<PersonalBest>()
+            if (rootObj.has("personalBests")) {
+                val pbArray = rootObj.getJSONArray("personalBests")
+                for (i in 0 until pbArray.length()) {
+                    val pbObj = pbArray.getJSONObject(i)
+                    val recordKey = pbObj.optString("recordKey")
+                    val dateAchieved = pbObj.optString("dateAchieved")
+                    if (recordKey.isNotBlank() && dateAchieved.isNotBlank()) {
+                        personalBestsList.add(
+                            PersonalBest(
+                                recordKey = recordKey,
+                                value = pbObj.optInt("value", 0),
+                                dateAchieved = dateAchieved,
+                                previousValue = pbObj.optInt("previousValue", 0),
+                                acknowledged = pbObj.optBoolean("acknowledged", false)
+                            )
+                        )
+                    }
+                }
+            }
+
+            val reviewsList = mutableListOf<EndOfDayReview>()
+            if (rootObj.has("endOfDayReviews")) {
+                val revArray = rootObj.getJSONArray("endOfDayReviews")
+                for (i in 0 until revArray.length()) {
+                    val revObj = revArray.getJSONObject(i)
+                    val date = revObj.optString("date")
+                    val rank = revObj.optString("rank")
+                    if (date.isNotBlank() && rank.isNotBlank()) {
+                        val obstaclesList = mutableListOf<String>()
+                        if (revObj.has("obstacles")) {
+                            val obsVal = revObj.get("obstacles")
+                            if (obsVal is JSONArray) {
+                                for (j in 0 until obsVal.length()) {
+                                    obstaclesList.add(obsVal.getString(j))
+                                }
+                            } else if (obsVal is String) {
+                                try {
+                                    val obsArr = JSONArray(obsVal)
+                                    for (j in 0 until obsArr.length()) {
+                                        obstaclesList.add(obsArr.getString(j))
+                                    }
+                                } catch (_: Exception) {
+                                    if (obsVal.isNotBlank()) obstaclesList.add(obsVal)
+                                }
+                            }
+                        }
+
+                        reviewsList.add(
+                            EndOfDayReview(
+                                date = date,
+                                completedTasks = revObj.optInt("completedTasks", 0),
+                                totalTasks = revObj.optInt("totalTasks", 0),
+                                score = revObj.optInt("score", 0),
+                                rank = rank,
+                                xpEarned = revObj.optInt("xpEarned", 0),
+                                obstacles = obstaclesList,
+                                note = if (revObj.isNull("note")) null else revObj.optString("note"),
+                                reviewedAt = revObj.optLong("reviewedAt", System.currentTimeMillis())
+                            )
+                        )
+                    }
+                }
+            }
+
+            val focusSessionsList = mutableListOf<FocusSession>()
+            if (rootObj.has("focusSessions")) {
+                val sessArray = rootObj.getJSONArray("focusSessions")
+                for (i in 0 until sessArray.length()) {
+                    val sessObj = sessArray.getJSONObject(i)
+                    val id = sessObj.optString("id")
+                    val taskId = sessObj.optString("taskId")
+                    if (id.isNotBlank() && taskId.isNotBlank()) {
+                        focusSessionsList.add(
+                            FocusSession(
+                                id = id,
+                                taskId = taskId,
+                                startTime = sessObj.optLong("startTime", 0L),
+                                endTime = sessObj.optLong("endTime", 0L),
+                                duration = sessObj.optLong("duration", 0L),
+                                completed = sessObj.optBoolean("completed", false)
+                            )
+                        )
+                    }
+                }
+            }
+
+            Result.success(
+                BackupData(
+                    categories = categoriesList,
+                    tasks = tasksList,
+                    groups = groupsList,
+                    templates = templatesList,
+                    dailyScores = dailyScoresList,
+                    xpEvents = xpEventsList,
+                    personalBests = personalBestsList,
+                    endOfDayReviews = reviewsList,
+                    focusSessions = focusSessionsList
+                )
+            )
         } catch (e: Exception) {
             Result.failure(Exception("File validation failed: ${e.localizedMessage ?: "Invalid JSON backup format"}"))
         }
@@ -270,6 +505,11 @@ class BackupRepository(private val context: Context) {
                 db.taskGroupDao().deleteAllGroups()
                 db.taskGroupTemplateDao().deleteAllTemplates()
                 db.categoryDao().deleteAllCategories()
+                db.dailyScoreDao().deleteAllScores()
+                db.xpEventDao().deleteAllEvents()
+                db.personalBestDao().deleteAllRecords()
+                db.endOfDayReviewDao().deleteAllReviews()
+                db.focusSessionDao().deleteAllSessions()
 
                 if (backupData.groups.isNotEmpty()) {
                     db.taskGroupDao().insertAll(backupData.groups)
@@ -283,6 +523,21 @@ class BackupRepository(private val context: Context) {
                 if (backupData.tasks.isNotEmpty()) {
                     db.activityTaskDao().insertAll(backupData.tasks)
                 }
+                if (backupData.dailyScores.isNotEmpty()) {
+                    db.dailyScoreDao().insertScores(backupData.dailyScores)
+                }
+                if (backupData.xpEvents.isNotEmpty()) {
+                    db.xpEventDao().insertEvents(backupData.xpEvents)
+                }
+                if (backupData.personalBests.isNotEmpty()) {
+                    db.personalBestDao().insertAll(backupData.personalBests)
+                }
+                if (backupData.endOfDayReviews.isNotEmpty()) {
+                    db.endOfDayReviewDao().insertReviews(backupData.endOfDayReviews)
+                }
+                if (backupData.focusSessions.isNotEmpty()) {
+                    db.focusSessionDao().insertSessions(backupData.focusSessions)
+                }
             }
 
             val categoryRepo = CategoryRepository(db.categoryDao(), db.activityTaskDao())
@@ -293,6 +548,8 @@ class BackupRepository(private val context: Context) {
             allTasks.forEach { task ->
                 ReminderScheduler.scheduleOrCancelReminder(context, task)
             }
+
+            KisekiWidgetUpdater.updateAllWidgets(context)
 
             Result.success(backupData.tasks.size)
         } catch (e: Exception) {
@@ -360,6 +617,22 @@ class BackupRepository(private val context: Context) {
                 if (tasksToInsert.isNotEmpty()) {
                     db.activityTaskDao().insertAll(tasksToInsert)
                 }
+
+                if (backupData.dailyScores.isNotEmpty()) {
+                    db.dailyScoreDao().insertScores(backupData.dailyScores)
+                }
+                if (backupData.xpEvents.isNotEmpty()) {
+                    db.xpEventDao().insertEvents(backupData.xpEvents)
+                }
+                if (backupData.personalBests.isNotEmpty()) {
+                    db.personalBestDao().insertAll(backupData.personalBests)
+                }
+                if (backupData.endOfDayReviews.isNotEmpty()) {
+                    db.endOfDayReviewDao().insertReviews(backupData.endOfDayReviews)
+                }
+                if (backupData.focusSessions.isNotEmpty()) {
+                    db.focusSessionDao().insertSessions(backupData.focusSessions)
+                }
             }
 
             val categoryRepo = CategoryRepository(db.categoryDao(), db.activityTaskDao())
@@ -370,6 +643,8 @@ class BackupRepository(private val context: Context) {
             allTasks.forEach { task ->
                 ReminderScheduler.scheduleOrCancelReminder(context, task)
             }
+
+            KisekiWidgetUpdater.updateAllWidgets(context)
 
             Result.success(mergedCount)
         } catch (e: Exception) {

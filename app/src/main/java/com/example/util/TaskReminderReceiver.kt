@@ -22,12 +22,18 @@ class TaskReminderReceiver : BroadcastReceiver() {
                         .forEach { task ->
                             ReminderScheduler.scheduleOrCancelReminder(context, task)
                         }
+                    ReminderScheduler.scheduleEndOfDayReview(context)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 } finally {
                     pendingResult.finish()
                 }
             }
+            return
+        }
+
+        if (intent.action == "com.example.ACTION_END_OF_DAY_REVIEW" || intent.getBooleanExtra("IS_END_OF_DAY_REVIEW", false)) {
+            ReminderScheduler.showEndOfDayReviewNotification(context)
             return
         }
 

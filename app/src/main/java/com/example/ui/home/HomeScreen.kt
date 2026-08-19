@@ -1,5 +1,6 @@
 package com.example.ui.home
 
+import kotlinx.coroutines.launch
 import com.example.ui.components.KisekiLogoBadge
 import com.example.ui.components.MonarchLogo
 import java.text.SimpleDateFormat
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.example.ui.theme.MotionTokens
 import com.example.ui.theme.pressScale
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
@@ -131,6 +133,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Add
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
@@ -146,7 +149,9 @@ fun HomeScreen(
     val isShadowMonarch = themeMode == ThemeMode.SHADOW_MONARCH
 
     val tasks by viewModel.allTasks.collectAsStateWithLifecycle()
+    val newlyCreatedTaskId by viewModel.newlyCreatedTaskId.collectAsStateWithLifecycle()
     val allDailyScores by viewModel.allDailyScores.collectAsStateWithLifecycle()
+    val allXpEvents by viewModel.allXpEvents.collectAsStateWithLifecycle()
     val dbCategories by viewModel.allCategories.collectAsStateWithLifecycle()
     val dbGroups by viewModel.allGroups.collectAsStateWithLifecycle()
     val levelInfo by viewModel.levelInfo.collectAsStateWithLifecycle()
@@ -154,7 +159,10 @@ fun HomeScreen(
     val xpToastAmount by viewModel.xpToastAmount.collectAsStateWithLifecycle()
     val highFrictionTasks by viewModel.highFrictionTasks.collectAsStateWithLifecycle()
     val topFrictionTask = androidx.compose.runtime.remember(highFrictionTasks) { highFrictionTasks.firstOrNull() }
+    val allEndOfDayReviews by viewModel.allEndOfDayReviews.collectAsStateWithLifecycle()
 
+    var showEndOfDayReviewSheet by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showTomorrowReviewSheet by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var breakSubtasksTask by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<ActivityTask?>(null) }
     var rescheduleFrictionTask by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<ActivityTask?>(null) }
 
@@ -171,6 +179,18 @@ fun HomeScreen(
     val today = androidx.compose.runtime.remember { LocalDate.now() }
     var selectedDate by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(today) }
     var weekOffset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+
+    val tomorrowDate = androidx.compose.runtime.remember(today) { today.plusDays(1) }
+    val tomorrowSummary = androidx.compose.runtime.remember(tasks, tomorrowDate) {
+        val zoneId = ZoneId.systemDefault()
+        val tomorrowTasks = tasks.filter { task ->
+            if (task.dueDate != null) {
+                val taskDate = Instant.ofEpochMilli(task.dueDate).atZone(zoneId).toLocalDate()
+                taskDate == tomorrowDate
+            } else false
+        }
+        com.example.domain.TomorrowWorkloadCalculator.calculate(tomorrowTasks)
+    }
 
     val startOfWeekDay = if (startWeekOnMonday) DayOfWeek.MONDAY else DayOfWeek.SUNDAY
     val currentWeekStart = androidx.compose.runtime.remember(today, weekOffset, startWeekOnMonday) {
@@ -318,7 +338,7 @@ fun HomeScreen(
                     onClick = onAddTaskClick,
                     modifier = Modifier
                         .size(54.dp)
-                        .pressScale(0.98f),
+                        .pressScale(0.97f),
                     shape = RoundedCornerShape(16.dp),
                     containerColor = Color(0xFF7967E8),
                     contentColor = Color.White,
@@ -338,7 +358,7 @@ fun HomeScreen(
             } else {
                 androidx.compose.material3.FloatingActionButton(
                     onClick = onAddTaskClick,
-                    modifier = Modifier.pressScale(0.92f),
+                    modifier = Modifier.pressScale(0.97f),
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
@@ -814,6 +834,40 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
+            if (!selectedDate.isAfter(today)) {
+                val reviewSummary = remember(selectedDate, tasks, allDailyScores, allXpEvents) {
+                    viewModel.getDaySummaryForReview(selectedDate.toString())
+                }
+                val existingReview = allEndOfDayReviews.find { it.date == selectedDate.toString() }
+                com.example.ui.components.EndOfDayReviewCard(
+                    summary = reviewSummary,
+                    review = existingReview,
+                    onOpenReview = { showEndOfDayReviewSheet = true },
+                    modifier = Modifier.padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            if (showEndOfDayReviewSheet) {
+                val reviewSummary = remember(selectedDate, tasks, allDailyScores, allXpEvents) {
+                    viewModel.getDaySummaryForReview(selectedDate.toString())
+                }
+                val existingReview = allEndOfDayReviews.find { it.date == selectedDate.toString() }
+                com.example.ui.components.EndOfDayReviewSheet(
+                    summary = reviewSummary,
+                    existingReview = existingReview,
+                    onSaveReview = { review ->
+                        viewModel.saveEndOfDayReview(review)
+                    },
+                    onDeleteReview = {
+                        viewModel.deleteEndOfDayReviewForDate(selectedDate.toString())
+                    },
+                    onDismiss = {
+                        showEndOfDayReviewSheet = false
+                    }
+                )
+            }
+
             topFrictionTask?.let { task ->
                 com.example.ui.components.FrictionSuggestionCard(
                     task = task,
@@ -915,6 +969,16 @@ fun HomeScreen(
                                 Text("Clear filters & search")
                             }
                         }
+
+                        if (selectedDate == today && !hasActiveFilters && trimmedQuery.isEmpty()) {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            com.example.ui.components.TomorrowPreviewCard(
+                                summary = tomorrowSummary,
+                                onReviewTasks = { showTomorrowReviewSheet = true },
+                                isShadowMonarch = isShadowMonarch,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                            )
+                        }
                     }
                 }
             } else {
@@ -1001,7 +1065,13 @@ fun HomeScreen(
                                 onDelete = { taskToDelete = it },
                                 onEdit = { onEditTaskClick(it.id) },
                                 onClick = { onTaskClick(task.id) },
-                                modifier = Modifier.animateItem(),
+                                isNewlyCreated = (task.id == newlyCreatedTaskId),
+                                onEntranceAnimationFinished = { viewModel.clearNewlyCreatedTaskId() },
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                    fadeOutSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                                    placementSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                                ),
                                 themeMode = themeMode
                             )
                         }
@@ -1046,8 +1116,25 @@ fun HomeScreen(
                                 onDelete = { taskToDelete = it },
                                 onEdit = { onEditTaskClick(it.id) },
                                 onClick = { onTaskClick(task.id) },
-                                modifier = Modifier.animateItem(),
+                                isNewlyCreated = (task.id == newlyCreatedTaskId),
+                                onEntranceAnimationFinished = { viewModel.clearNewlyCreatedTaskId() },
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                                    fadeOutSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                                    placementSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                                ),
                                 themeMode = themeMode
+                            )
+                        }
+                    }
+
+                    if (selectedDate == today) {
+                        item {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            com.example.ui.components.TomorrowPreviewCard(
+                                summary = tomorrowSummary,
+                                onReviewTasks = { showTomorrowReviewSheet = true },
+                                isShadowMonarch = isShadowMonarch
                             )
                         }
                     }
@@ -1057,6 +1144,29 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+
+        if (showTomorrowReviewSheet) {
+            com.example.ui.components.TomorrowReviewBottomSheet(
+                summary = tomorrowSummary,
+                tomorrowDate = tomorrowDate,
+                onNavigateToTomorrow = {
+                    selectedDate = tomorrowDate
+                    val startOfWeek = if (startWeekOnMonday) DayOfWeek.MONDAY else DayOfWeek.SUNDAY
+                    val todayWeekStart = today.with(startOfWeek)
+                    val tomorrowWeekStart = tomorrowDate.with(startOfWeek)
+                    if (tomorrowWeekStart != todayWeekStart) {
+                        weekOffset = 1
+                    }
+                },
+                onDismiss = {
+                    showTomorrowReviewSheet = false
+                },
+                onTaskClick = { taskId ->
+                    onTaskClick(taskId)
+                },
+                isShadowMonarch = isShadowMonarch
+            )
         }
 
         if (showFilterBottomSheet) {
@@ -1312,7 +1422,9 @@ fun TaskItemCard(
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    onRemoveFromGroup: (() -> Unit)? = null
+    onRemoveFromGroup: (() -> Unit)? = null,
+    isNewlyCreated: Boolean = false,
+    onEntranceAnimationFinished: (() -> Unit)? = null
 ) {
     val isShadowMonarch = themeMode == ThemeMode.SHADOW_MONARCH
     if (isShadowMonarch) {
@@ -1325,7 +1437,9 @@ fun TaskItemCard(
             onEdit = onEdit,
             onClick = onClick,
             modifier = modifier,
-            onRemoveFromGroup = onRemoveFromGroup
+            onRemoveFromGroup = onRemoveFromGroup,
+            isNewlyCreated = isNewlyCreated,
+            onEntranceAnimationFinished = onEntranceAnimationFinished
         )
         return
     }
@@ -1333,9 +1447,32 @@ fun TaskItemCard(
     val targetAlpha = if (task.isCompleted) 0.7f else 1f
     val animatedAlpha by animateFloatAsState(
         targetValue = targetAlpha,
-        animationSpec = tween(durationMillis = 180, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
         label = "TaskCardAlpha"
     )
+
+    val textAlpha by animateFloatAsState(
+        targetValue = if (task.isCompleted) 0.7f else 1f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "TaskTextAlpha"
+    )
+
+    val entranceAlpha = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 0f else 1f) }
+    val entranceTranslationY = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 10f else 0f) }
+    val entranceScale = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 0.98f else 1f) }
+
+    LaunchedEffect(isNewlyCreated) {
+        if (isNewlyCreated) {
+            launch {
+                entranceAlpha.animateTo(1f, tween(durationMillis = 240, easing = FastOutSlowInEasing))
+            }
+            launch {
+                entranceTranslationY.animateTo(0f, tween(durationMillis = 240, easing = FastOutSlowInEasing))
+            }
+            entranceScale.animateTo(1f, tween(durationMillis = 240, easing = FastOutSlowInEasing))
+            onEntranceAnimationFinished?.invoke()
+        }
+    }
 
     val cardBgColor = when {
         isShadowMonarch -> MonarchSurface
@@ -1352,13 +1489,19 @@ fun TaskItemCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .pressScale(0.98f)
+            .pressScale(0.985f)
+            .graphicsLayer {
+                val px10 = 10.dp.toPx()
+                alpha = animatedAlpha * entranceAlpha.value
+                translationY = (entranceTranslationY.value / 10f) * px10
+                scaleX = entranceScale.value
+                scaleY = entranceScale.value
+            }
             .clip(RoundedCornerShape(cardRadius))
             .background(cardBgColor)
             .clickable { onClick() }
             .border(borderStroke, RoundedCornerShape(cardRadius))
             .padding(if (isShadowMonarch) 14.dp else 16.dp)
-            .alpha(animatedAlpha)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             if (isShadowMonarch && task.priority == Priority.High) {
@@ -1402,7 +1545,7 @@ fun TaskItemCard(
                             ),
                             color = when {
                                 task.isCompleted && isShadowMonarch -> MonarchTextMuted
-                                task.isCompleted -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                task.isCompleted -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f * textAlpha)
                                 isShadowMonarch -> MonarchTextPrimary
                                 else -> MaterialTheme.colorScheme.onSurface
                             }
@@ -2250,7 +2393,9 @@ fun MonarchTaskCard(
     onEdit: (ActivityTask) -> Unit,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier,
-    onRemoveFromGroup: (() -> Unit)? = null
+    onRemoveFromGroup: (() -> Unit)? = null,
+    isNewlyCreated: Boolean = false,
+    onEntranceAnimationFinished: (() -> Unit)? = null
 ) {
     var isPressed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
@@ -2262,10 +2407,40 @@ fun MonarchTaskCard(
     }
 
     val animatedScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = tween(durationMillis = 100),
+        targetValue = if (isPressed) 0.985f else 1f,
+        animationSpec = tween(durationMillis = 100, easing = FastOutSlowInEasing),
         label = "MonarchCardScale"
     )
+
+    val targetAlpha = if (task.isCompleted) 0.7f else 1f
+    val animatedAlpha by animateFloatAsState(
+        targetValue = targetAlpha,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "MonarchTaskAlpha"
+    )
+
+    val textAlpha by animateFloatAsState(
+        targetValue = if (task.isCompleted) 0.7f else 1f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "MonarchTextAlpha"
+    )
+
+    val entranceAlpha = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 0f else 1f) }
+    val entranceTranslationY = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 10f else 0f) }
+    val entranceScale = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 0.98f else 1f) }
+
+    LaunchedEffect(isNewlyCreated) {
+        if (isNewlyCreated) {
+            launch {
+                entranceAlpha.animateTo(1f, tween(durationMillis = 240, easing = FastOutSlowInEasing))
+            }
+            launch {
+                entranceTranslationY.animateTo(0f, tween(durationMillis = 240, easing = FastOutSlowInEasing))
+            }
+            entranceScale.animateTo(1f, tween(durationMillis = 240, easing = FastOutSlowInEasing))
+            onEntranceAnimationFinished?.invoke()
+        }
+    }
 
     val cardBgColor = if (isPressed) Color(0xFF171C28) else Color(0xFF121620)
     val cardBorderColor = if (isPressed) Color(0xFF7967E8) else Color(0xFF283044)
@@ -2274,8 +2449,11 @@ fun MonarchTaskCard(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer {
-                scaleX = animatedScale.coerceIn(0.96f, 1f)
-                scaleY = animatedScale.coerceIn(0.96f, 1f)
+                val px10 = 10.dp.toPx()
+                scaleX = animatedScale.coerceIn(0.97f, 1f) * entranceScale.value
+                scaleY = animatedScale.coerceIn(0.97f, 1f) * entranceScale.value
+                alpha = animatedAlpha * entranceAlpha.value
+                translationY = (entranceTranslationY.value / 10f) * px10
             }
             .clip(RoundedCornerShape(14.dp))
             .background(cardBgColor)
@@ -2326,7 +2504,7 @@ fun MonarchTaskCard(
                             fontWeight = FontWeight.Medium,
                             textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                         ),
-                        color = if (task.isCompleted) Color(0xFF737B8E) else Color(0xFFF2F3F7),
+                        color = if (task.isCompleted) Color(0xFF737B8E).copy(alpha = 0.7f * textAlpha) else Color(0xFFF2F3F7),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -2510,6 +2688,7 @@ fun MonarchEmptyState(
 
         Button(
             onClick = onAddTaskClick,
+            modifier = Modifier.pressScale(0.97f),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF7967E8),

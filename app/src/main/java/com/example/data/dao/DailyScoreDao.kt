@@ -27,4 +27,7 @@ interface DailyScoreDao {
     
     @Query("SELECT * FROM daily_scores ORDER BY date DESC")
     suspend fun getAllScores(): List<DailyScore>
+
+    @Query("DELETE FROM daily_scores")
+    suspend fun deleteAllScores()
 }

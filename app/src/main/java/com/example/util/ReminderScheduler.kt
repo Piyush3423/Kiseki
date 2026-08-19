@@ -184,6 +184,125 @@ object ReminderScheduler {
         notificationManager.notify(taskId.hashCode(), notification)
     }
 
+    fun scheduleEndOfDayReview(context: Context, timeStr: String? = null) {
+        createNotificationChannel(context)
+        val prefsRepo = com.example.data.repository.UserPreferencesRepository(context)
+        val isEnabled = prefsRepo.isEndOfDayReviewEnabledSync()
+        val isRemindersEnabled = prefsRepo.isRemindersEnabledSync()
+        if (!isEnabled || !isRemindersEnabled) {
+            cancelEndOfDayReview(context)
+            return
+        }
+
+        val time = timeStr ?: prefsRepo.getEndOfDayReviewTimeSync()
+        val parts = time.split(":")
+        val hour = parts.getOrNull(0)?.toIntOrNull() ?: 21
+        val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
+
+        val calendar = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, hour)
+            set(java.util.Calendar.MINUTE, minute)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+            if (timeInMillis <= System.currentTimeMillis()) {
+                add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
+        }
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val intent = Intent(context, TaskReminderReceiver::class.java).apply {
+            action = "com.example.ACTION_END_OF_DAY_REVIEW"
+            putExtra("IS_END_OF_DAY_REVIEW", true)
+        }
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            888999,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    calendar.timeInMillis,
+                    pendingIntent
+                )
+            }
+        } catch (e: Exception) {
+            alarmManager.set(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                pendingIntent
+            )
+        }
+    }
+
+    fun cancelEndOfDayReview(context: Context) {
+        val intent = Intent(context, TaskReminderReceiver::class.java).apply {
+            action = "com.example.ACTION_END_OF_DAY_REVIEW"
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            888999,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (pendingIntent != null) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            alarmManager?.cancel(pendingIntent)
+            pendingIntent.cancel()
+        }
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        notificationManager?.cancel(888999)
+    }
+
+    fun showEndOfDayReviewNotification(context: Context) {
+        val prefsRepo = com.example.data.repository.UserPreferencesRepository(context)
+        if (!prefsRepo.isEndOfDayReviewEnabledSync() || !prefsRepo.isRemindersEnabledSync()) {
+            return
+        }
+
+        createNotificationChannel(context)
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("OPEN_END_OF_DAY_REVIEW", true)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            888999,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("Day Complete • End-of-Day Review")
+            .setContentText("Take 15 seconds to review today's achievements and obstacles.")
+            .setSubText("End-of-Day Review")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(888999, notification)
+
+        // Reschedule for next day
+        scheduleEndOfDayReview(context)
+    }
+
     private fun formatReminderText(dueDate: Long?, reminderTime: Long): String {
         val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
         val dateFormat = SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault())

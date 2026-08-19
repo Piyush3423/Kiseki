@@ -43,5 +43,6 @@ data class ActivityTask(
     val missCount: Int = 0,
     val lateCompletionCount: Int = 0,
     val frictionScore: Float = 0f,
-    val frictionSuppressedUntil: Long? = null
+    val frictionSuppressedUntil: Long? = null,
+    val estimatedDurationMinutes: Int? = null
 )

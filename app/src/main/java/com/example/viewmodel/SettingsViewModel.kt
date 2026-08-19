@@ -74,6 +74,29 @@ class SettingsViewModel(
             tasks.forEach { task ->
                 ReminderScheduler.scheduleOrCancelReminder(context, task)
             }
+            if (enable) {
+                ReminderScheduler.scheduleEndOfDayReview(context)
+            } else {
+                ReminderScheduler.cancelEndOfDayReview(context)
+            }
+        }
+    }
+
+    fun setEnableEndOfDayReview(enable: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.setEnableEndOfDayReview(enable)
+            if (enable) {
+                ReminderScheduler.scheduleEndOfDayReview(context)
+            } else {
+                ReminderScheduler.cancelEndOfDayReview(context)
+            }
+        }
+    }
+
+    fun setEndOfDayReviewTime(time: String) {
+        viewModelScope.launch {
+            preferencesRepository.setEndOfDayReviewTime(time)
+            ReminderScheduler.scheduleEndOfDayReview(context, time)
         }
     }
 
