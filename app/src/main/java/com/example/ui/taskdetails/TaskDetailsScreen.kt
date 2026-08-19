@@ -217,8 +217,10 @@ private fun TaskDetailsContent(
                 )
             },
             confirmButton = {
+                val view = androidx.compose.ui.platform.LocalView.current
                 Button(
                     onClick = {
+                        com.example.util.KisekiHaptics.performDeleteConfirm(view)
                         viewModel.deleteTask(task)
                         showDeleteDialog = false
                         onNavigateBack()
@@ -354,9 +356,14 @@ private fun TaskDetailsContent(
                     modifier = Modifier.weight(1f)
                 )
                 
+                val view = androidx.compose.ui.platform.LocalView.current
                 Checkbox(
                     checked = task.isCompleted,
-                    onCheckedChange = { viewModel.updateTask(task.copy(isCompleted = it)) }
+                    onCheckedChange = { isChecked ->
+                        if (isChecked) com.example.util.KisekiHaptics.performTaskComplete(view)
+                        else com.example.util.KisekiHaptics.performTaskUncomplete(view)
+                        viewModel.updateTask(task.copy(isCompleted = isChecked))
+                    }
                 )
             }
 

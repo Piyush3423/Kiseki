@@ -119,6 +119,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.testTag
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Badge
@@ -153,6 +157,7 @@ fun HomeScreen(
     val isShadowMonarch = themeMode == ThemeMode.SHADOW_MONARCH
 
     val tasks by viewModel.allTasks.collectAsStateWithLifecycle()
+    val isTasksLoaded by viewModel.isTasksLoaded.collectAsStateWithLifecycle()
     val newlyCreatedTaskId by viewModel.newlyCreatedTaskId.collectAsStateWithLifecycle()
     val allDailyScores by viewModel.allDailyScores.collectAsStateWithLifecycle()
     val allXpEvents by viewModel.allXpEvents.collectAsStateWithLifecycle()
@@ -336,329 +341,186 @@ fun HomeScreen(
     androidx.compose.material3.Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = Color.Transparent,
-        floatingActionButton = {
-            if (isShadowMonarch) {
-                androidx.compose.material3.FloatingActionButton(
-                    onClick = onAddTaskClick,
-                    modifier = Modifier
-                        .size(54.dp)
-                        .pressScale(0.97f),
-                    shape = RoundedCornerShape(16.dp),
-                    containerColor = Color(0xFF7967E8),
-                    contentColor = Color.White,
-                    elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 1.dp,
-                        pressedElevation = 2.dp,
-                        focusedElevation = 1.dp,
-                        hoveredElevation = 1.dp
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = "Add Task",
-                        tint = Color.White
-                    )
-                }
-            } else {
-                androidx.compose.material3.FloatingActionButton(
-                    onClick = onAddTaskClick,
-                    modifier = Modifier.pressScale(0.97f),
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add Task")
-                }
-            }
-        }
+        floatingActionButton = {}
     ) { innerPadding ->
-        Column(
+        var taskToDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<ActivityTask?>(null) }
+
+        if (taskToDelete != null) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { taskToDelete = null },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Delete Task?",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to permanently delete '${taskToDelete?.title}'?\nThis action cannot be undone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                confirmButton = {
+                    val view = androidx.compose.ui.platform.LocalView.current
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            com.example.util.KisekiHaptics.performDeleteConfirm(view)
+                            taskToDelete?.let { viewModel.deleteTask(it) }
+                            taskToDelete = null
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { taskToDelete = null }
+                    ) {
+                        Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
+                    }
+                },
+                shape = RoundedCornerShape(24.dp),
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            )
+        }
+
+        if (showEndOfDayReviewSheet) {
+            val reviewSummary = remember(selectedDate, tasks, allDailyScores, allXpEvents) {
+                viewModel.getDaySummaryForReview(selectedDate.toString())
+            }
+            val existingReview = allEndOfDayReviews.find { it.date == selectedDate.toString() }
+            com.example.ui.components.EndOfDayReviewSheet(
+                summary = reviewSummary,
+                existingReview = existingReview,
+                onSaveReview = { review ->
+                    viewModel.saveEndOfDayReview(review)
+                },
+                onDeleteReview = {
+                    viewModel.deleteEndOfDayReviewForDate(selectedDate.toString())
+                },
+                onDismiss = {
+                    showEndOfDayReviewSheet = false
+                }
+            )
+        }
+
+        breakSubtasksTask?.let { task ->
+            com.example.ui.components.BreakIntoSubtasksDialog(
+                taskTitle = task.title,
+                onDismiss = { breakSubtasksTask = null },
+                onConfirm = { subtasks ->
+                    viewModel.breakTaskIntoSubtasks(task, subtasks)
+                    breakSubtasksTask = null
+                }
+            )
+        }
+
+        rescheduleFrictionTask?.let { task ->
+            com.example.ui.components.RescheduleFrictionTaskDialog(
+                taskTitle = task.title,
+                currentDueDate = task.dueDate,
+                onDismiss = { rescheduleFrictionTask = null },
+                onConfirm = { newDueDate ->
+                    viewModel.rescheduleFrictionTask(task, newDueDate)
+                    rescheduleFrictionTask = null
+                }
+            )
+        }
+
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding),
+            contentPadding = PaddingValues(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header
-            if (isShadowMonarch) {
-                MonarchHomeHeader(
-                    selectedDate = selectedDate,
-                    streak = currentStreak,
-                    isSearchActive = isSearchActive,
-                    searchQuery = searchQuery,
-                    onSearchQueryChange = { searchQuery = it },
-                    onSearchClick = { isSearchActive = true },
-                    onFilterClick = { showFilterBottomSheet = true },
-                    onCloseSearch = {
-                        searchQuery = ""
-                        isSearchActive = false
-                    },
-                    hasActiveFilters = hasActiveFilters
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                MonarchDailyProgressPanel(
-                    completedCount = completedSelectedDateTasks,
-                    totalCount = totalSelectedDateTasks,
-                    completionPercentage = completionPercentage,
-                    dailyScore = allDailyScores.find { it.date == selectedDate.toString() }?.score ?: 0,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                HomeLevelIndicator(levelInfo = levelInfo, momentumInfo = momentumInfo, isShadowMonarch = true)
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                WeeklyDateSelector(
-                    selectedDate = selectedDate,
-                    today = today,
-                    weekDays = weekDays,
-                    weekRangeText = weekRangeText,
-                    themeMode = themeMode,
-                    onDateSelected = { selectedDate = it },
-                    onPreviousWeek = {
-                        weekOffset--
-                        val newMonday = today.plusWeeks(weekOffset.toLong()).with(DayOfWeek.MONDAY)
-                        selectedDate = newMonday
-                    },
-                    onNextWeek = {
-                        weekOffset++
-                        val newMonday = today.plusWeeks(weekOffset.toLong()).with(DayOfWeek.MONDAY)
-                        selectedDate = newMonday
-                    },
-                    onTodayClick = {
-                        weekOffset = 0
-                        selectedDate = today
-                    }
-                )
-
-                if (hasActiveFilters) {
-                    Row(
+            // 1. HEADER
+            item {
+                if (isShadowMonarch) {
+                    MonarchHomeHeader(
+                        selectedDate = selectedDate,
+                        streak = currentStreak,
+                        isSearchActive = isSearchActive,
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { searchQuery = it },
+                        onSearchClick = { isSearchActive = true },
+                        onFilterClick = { showFilterBottomSheet = true },
+                        onCloseSearch = {
+                            searchQuery = ""
+                            isSearchActive = false
+                        },
+                        hasActiveFilters = hasActiveFilters
+                    )
+                } else {
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(top = 16.dp, start = 24.dp, end = 24.dp, bottom = 4.dp)
                     ) {
-                        if (selectedCategory != "All") {
-                            FilterChip(
-                                selected = true,
-                                onClick = { selectedCategory = "All" },
-                                label = { Text("Category: $selectedCategory") },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Remove category filter",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MonarchSurfaceSecondary,
-                                    selectedLabelColor = MonarchTextPrimary
-                                )
-                            )
-                        }
-                        if (selectedPriority != "All") {
-                            FilterChip(
-                                selected = true,
-                                onClick = { selectedPriority = "All" },
-                                label = { Text("Priority: $selectedPriority") },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Remove priority filter",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MonarchSurfaceSecondary,
-                                    selectedLabelColor = MonarchTextPrimary
-                                )
-                            )
-                        }
-                        if (selectedStatus != "All") {
-                            FilterChip(
-                                selected = true,
-                                onClick = { selectedStatus = "All" },
-                                label = { Text("Status: $selectedStatus") },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Remove status filter",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MonarchSurfaceSecondary,
-                                    selectedLabelColor = MonarchTextPrimary
-                                )
-                            )
-                        }
-                        if (selectedSort != SortOption.DEFAULT) {
-                            FilterChip(
-                                selected = true,
-                                onClick = { selectedSort = SortOption.DEFAULT },
-                                label = { Text("Sort: ${selectedSort.displayName}") },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Reset sort",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MonarchSurfaceSecondary,
-                                    selectedLabelColor = MonarchTextPrimary
-                                )
-                            )
-                        }
-                        TextButton(
-                            onClick = {
-                                selectedCategory = "All"
-                                selectedPriority = "All"
-                                selectedStatus = "All"
-                                selectedSort = SortOption.DEFAULT
-                            }
-                        ) {
-                            Text("Clear All", color = MonarchPrimary)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Today's Objectives",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = Color(0xFFF2F3F7)
-                    )
-                    Text(
-                        text = "${filteredTasks.size} tasks",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = Color(0xFF737B8E)
-                    )
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 48.dp, start = 24.dp, end = 24.dp, bottom = 12.dp)
-                ) {
-                    AnimatedContent(
-                        targetState = isSearchActive,
-                        transitionSpec = {
-                            (fadeIn(animationSpec = MotionTokens.standardTween()) + expandVertically()) togetherWith
-                                    (fadeOut(animationSpec = MotionTokens.standardTween()) + shrinkVertically())
-                        },
-                        label = "SearchHeaderTransition"
-                    ) { searchActive ->
-                        if (!searchActive) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                        AnimatedContent(
+                            targetState = isSearchActive,
+                            transitionSpec = {
+                                (fadeIn(animationSpec = MotionTokens.standardTween()) + expandVertically()) togetherWith
+                                        (fadeOut(animationSpec = MotionTokens.standardTween()) + shrinkVertically())
+                            },
+                            label = "SearchHeaderTransition"
+                        ) { searchActive ->
+                            if (!searchActive) {
                                 Row(
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    KisekiLogoBadge(
-                                        badgeSize = 44.dp,
-                                        logoSize = 28.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = "Kiseki",
-                                            style = MaterialTheme.typography.headlineMedium.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                letterSpacing = (-0.5).sp
-                                            ),
-                                            color = MaterialTheme.colorScheme.onBackground
-                                        )
-                                        Text(
-                                            text = "Shape your day. Build your story.",
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontWeight = FontWeight.Medium
-                                            ),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = { isSearchActive = true },
-                                        modifier = Modifier.pressScale(0.9f)
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Search,
-                                            contentDescription = "Search tasks",
-                                            tint = MaterialTheme.colorScheme.onSurface
+                                        KisekiLogoBadge(
+                                            badgeSize = 40.dp,
+                                            logoSize = 24.dp
                                         )
-                                    }
-                                    IconButton(
-                                        onClick = { showFilterBottomSheet = true },
-                                        modifier = Modifier.pressScale(0.9f)
-                                    ) {
-                                        if (hasActiveFilters) {
-                                            BadgedBox(badge = { Badge() }) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.FilterList,
-                                                    contentDescription = "Filter and sort tasks",
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        } else {
-                                            Icon(
-                                                imageVector = Icons.Rounded.FilterList,
-                                                contentDescription = "Filter and sort tasks",
-                                                tint = MaterialTheme.colorScheme.onSurface
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = "Kiseki",
+                                                style = MaterialTheme.typography.titleLarge.copy(
+                                                    fontWeight = FontWeight.Bold,
+                                                    letterSpacing = (-0.5).sp
+                                                ),
+                                                color = MaterialTheme.colorScheme.onBackground
+                                            )
+                                            Text(
+                                                text = "Shape your day. Build your story.",
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontWeight = FontWeight.Medium
+                                                ),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
-                                }
-                            }
-                        } else {
-                            OutlinedTextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("Search tasks...") },
-                                singleLine = true,
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Search,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                trailingIcon = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        if (searchQuery.isNotEmpty()) {
-                                            IconButton(
-                                                onClick = { searchQuery = "" },
-                                                modifier = Modifier.pressScale(0.9f)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Clear,
-                                                    contentDescription = "Clear search",
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
+                                        IconButton(
+                                            onClick = { isSearchActive = true },
+                                            modifier = Modifier.pressScale(0.9f)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Search,
+                                                contentDescription = "Search tasks",
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
                                         }
                                         IconButton(
                                             onClick = { showFilterBottomSheet = true },
@@ -676,136 +538,100 @@ fun HomeScreen(
                                                 Icon(
                                                     imageVector = Icons.Rounded.FilterList,
                                                     contentDescription = "Filter and sort tasks",
+                                                    tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("Search tasks...") },
+                                    singleLine = true,
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Search,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (searchQuery.isNotEmpty()) {
+                                                IconButton(
+                                                    onClick = { searchQuery = "" },
+                                                    modifier = Modifier.pressScale(0.9f)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Clear,
+                                                        contentDescription = "Clear search",
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                            IconButton(
+                                                onClick = { showFilterBottomSheet = true },
+                                                modifier = Modifier.pressScale(0.9f)
+                                            ) {
+                                                if (hasActiveFilters) {
+                                                    BadgedBox(badge = { Badge() }) {
+                                                        Icon(
+                                                            imageVector = Icons.Rounded.FilterList,
+                                                            contentDescription = "Filter and sort tasks",
+                                                            tint = MaterialTheme.colorScheme.primary
+                                                        )
+                                                    }
+                                                } else {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.FilterList,
+                                                        contentDescription = "Filter and sort tasks",
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    searchQuery = ""
+                                                    isSearchActive = false
+                                                },
+                                                modifier = Modifier.pressScale(0.9f)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Close,
+                                                    contentDescription = "Close search",
                                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                         }
-                                        IconButton(
-                                            onClick = {
-                                                searchQuery = ""
-                                                isSearchActive = false
-                                            },
-                                            modifier = Modifier.pressScale(0.9f)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Close,
-                                                contentDescription = "Close search",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                },
-                                shape = RoundedCornerShape(16.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                                )
-                            )
-                        }
-                    }
-                }
-
-                // Active Filter Chips Row
-                HomeLevelIndicator(levelInfo = levelInfo, momentumInfo = momentumInfo, isShadowMonarch = false)
-
-                if (hasActiveFilters) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 24.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (selectedCategory != "All") {
-                            FilterChip(
-                                selected = true,
-                                onClick = { selectedCategory = "All" },
-                                label = { Text("Category: $selectedCategory") },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Remove category filter",
-                                        modifier = Modifier.size(16.dp)
+                                    },
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                                     )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
-                            )
-                        }
-                        if (selectedPriority != "All") {
-                            FilterChip(
-                                selected = true,
-                                onClick = { selectedPriority = "All" },
-                                label = { Text("Priority: $selectedPriority") },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Remove priority filter",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            )
-                        }
-                        if (selectedStatus != "All") {
-                            FilterChip(
-                                selected = true,
-                                onClick = { selectedStatus = "All" },
-                                label = { Text("Status: $selectedStatus") },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Remove status filter",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            )
-                        }
-                        if (selectedSort != SortOption.DEFAULT) {
-                            FilterChip(
-                                selected = true,
-                                onClick = { selectedSort = SortOption.DEFAULT },
-                                label = { Text("Sort: ${selectedSort.displayName}") },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Reset sort",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            )
-                        }
-                        TextButton(
-                            onClick = {
-                                selectedCategory = "All"
-                                selectedPriority = "All"
-                                selectedStatus = "All"
-                                selectedSort = SortOption.DEFAULT
                             }
-                        ) {
-                            Text("Clear All")
                         }
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(12.dp))
+            // 2. COMPACT LEVEL / XP STRIP
+            item {
+                HomeLevelIndicator(
+                    levelInfo = levelInfo,
+                    momentumInfo = momentumInfo,
+                    isShadowMonarch = isShadowMonarch
+                )
+            }
 
+            // 3. WEEK SELECTOR
+            item {
                 WeeklyDateSelector(
                     selectedDate = selectedDate,
                     today = today,
@@ -830,137 +656,190 @@ fun HomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            val scoreForSelectedDate = allDailyScores.find { it.date == selectedDate.toString() }
-            if (scoreForSelectedDate != null && (totalSelectedDateTasks > 0 || scoreForSelectedDate.score > 0)) {
-                com.example.ui.components.DailyScoreCard(score = scoreForSelectedDate, selectedDate = selectedDate, today = today)
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            if (!selectedDate.isAfter(today)) {
-                val reviewSummary = remember(selectedDate, tasks, allDailyScores, allXpEvents) {
-                    viewModel.getDaySummaryForReview(selectedDate.toString())
-                }
-                val existingReview = allEndOfDayReviews.find { it.date == selectedDate.toString() }
-                com.example.ui.components.EndOfDayReviewCard(
-                    summary = reviewSummary,
-                    review = existingReview,
-                    onOpenReview = { showEndOfDayReviewSheet = true },
-                    modifier = Modifier.padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            if (showEndOfDayReviewSheet) {
-                val reviewSummary = remember(selectedDate, tasks, allDailyScores, allXpEvents) {
-                    viewModel.getDaySummaryForReview(selectedDate.toString())
-                }
-                val existingReview = allEndOfDayReviews.find { it.date == selectedDate.toString() }
-                com.example.ui.components.EndOfDayReviewSheet(
-                    summary = reviewSummary,
-                    existingReview = existingReview,
-                    onSaveReview = { review ->
-                        viewModel.saveEndOfDayReview(review)
-                    },
-                    onDeleteReview = {
-                        viewModel.deleteEndOfDayReviewForDate(selectedDate.toString())
-                    },
-                    onDismiss = {
-                        showEndOfDayReviewSheet = false
+            if (hasActiveFilters) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (selectedCategory != "All") {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedCategory = "All" },
+                                label = { Text("Category: $selectedCategory") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove category filter",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = if (isShadowMonarch) MonarchSurfaceSecondary else MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = if (isShadowMonarch) MonarchTextPrimary else MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        if (selectedPriority != "All") {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedPriority = "All" },
+                                label = { Text("Priority: $selectedPriority") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove priority filter",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = if (isShadowMonarch) MonarchSurfaceSecondary else MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = if (isShadowMonarch) MonarchTextPrimary else MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        if (selectedStatus != "All") {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedStatus = "All" },
+                                label = { Text("Status: $selectedStatus") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove status filter",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = if (isShadowMonarch) MonarchSurfaceSecondary else MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = if (isShadowMonarch) MonarchTextPrimary else MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        if (selectedSort != SortOption.DEFAULT) {
+                            FilterChip(
+                                selected = true,
+                                onClick = { selectedSort = SortOption.DEFAULT },
+                                label = { Text("Sort: ${selectedSort.displayName}") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Reset sort",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = if (isShadowMonarch) MonarchSurfaceSecondary else MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = if (isShadowMonarch) MonarchTextPrimary else MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                selectedCategory = "All"
+                                selectedPriority = "All"
+                                selectedStatus = "All"
+                                selectedSort = SortOption.DEFAULT
+                            }
+                        ) {
+                            Text("Clear All", color = if (isShadowMonarch) MonarchPrimary else MaterialTheme.colorScheme.primary)
+                        }
                     }
-                )
+                }
+            }
+
+            // 4. TODAY SECTION HEADER
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (selectedDate == today) "TODAY" else selectedDate.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault())).uppercase(),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        ),
+                        color = if (isShadowMonarch) Color(0xFFF2F3F7) else MaterialTheme.colorScheme.onBackground
+                    )
+
+                    val scoreForDate = allDailyScores.find { it.date == selectedDate.toString() }?.score
+                    val statusText = if (scoreForDate != null && scoreForDate > 0) {
+                        "Score $scoreForDate • Rank $rankLabel"
+                    } else {
+                        "$completedSelectedDateTasks / $totalSelectedDateTasks"
+                    }
+
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = if (isShadowMonarch) Color(0xFF7967E8) else MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
             topFrictionTask?.let { task ->
-                com.example.ui.components.FrictionSuggestionCard(
-                    task = task,
-                    onBreakIntoSubtasks = { breakSubtasksTask = task },
-                    onReschedule = { rescheduleFrictionTask = task },
-                    onLowerPriority = { viewModel.lowerTaskPriority(task) },
-                    onKeepAsIs = { viewModel.keepTaskAsIs(task) },
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    isShadowMonarch = isShadowMonarch
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            breakSubtasksTask?.let { task ->
-                com.example.ui.components.BreakIntoSubtasksDialog(
-                    taskTitle = task.title,
-                    onDismiss = { breakSubtasksTask = null },
-                    onConfirm = { subtasks ->
-                        viewModel.breakTaskIntoSubtasks(task, subtasks)
-                        breakSubtasksTask = null
-                    }
-                )
-            }
-
-            rescheduleFrictionTask?.let { task ->
-                com.example.ui.components.RescheduleFrictionTaskDialog(
-                    taskTitle = task.title,
-                    currentDueDate = task.dueDate,
-                    onDismiss = { rescheduleFrictionTask = null },
-                    onConfirm = { newDueDate ->
-                        viewModel.rescheduleFrictionTask(task, newDueDate)
-                        rescheduleFrictionTask = null
-                    }
-                )
-            }
-
-            // Main Content
-            if (filteredTasks.isEmpty()) {
-                if (isShadowMonarch) {
-                    MonarchEmptyState(
-                        onAddTaskClick = onAddTaskClick,
-                        modifier = Modifier.weight(1f)
+                item {
+                    com.example.ui.components.FrictionSuggestionCard(
+                        task = task,
+                        onBreakIntoSubtasks = { breakSubtasksTask = task },
+                        onReschedule = { rescheduleFrictionTask = task },
+                        onLowerPriority = { viewModel.lowerTaskPriority(task) },
+                        onKeepAsIs = { viewModel.keepTaskAsIs(task) },
+                        modifier = Modifier.padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp),
+                        isShadowMonarch = isShadowMonarch
                     )
-                } else {
+                }
+            }
+
+            // 4. TODAY SECTION CONTENT
+            if (filteredTasks.isEmpty()) {
+                item {
                     Column(
                         modifier = Modifier
-                            .weight(1f)
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp),
+                            .padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp, vertical = 20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Search,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "No tasks for this day",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Medium
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface
+                        Icon(
+                            imageVector = Icons.Rounded.DateRange,
+                            contentDescription = null,
+                            tint = if (isShadowMonarch) Color(0xFF7967E8) else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                            modifier = Modifier.size(36.dp)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        val emptyMessage = when {
-                            trimmedQuery.isNotEmpty() && hasActiveFilters -> "No tasks match \"$trimmedQuery\" with active filters."
-                            trimmedQuery.isNotEmpty() -> "No tasks found matching \"$trimmedQuery\""
-                            hasActiveFilters -> "No tasks match active filters."
-                            else -> "No tasks scheduled for ${if (selectedDate == today) "today" else selectedDate.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()))}."
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = if (hasActiveFilters || trimmedQuery.isNotEmpty()) "No tasks match filters" else "No tasks scheduled",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = if (isShadowMonarch) Color(0xFFF0F0F5) else MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val emptySubtext = when {
+                            trimmedQuery.isNotEmpty() -> "No tasks found matching \"$trimmedQuery\"."
+                            hasActiveFilters -> "Try resetting active filters."
+                            else -> "Plan something for ${if (selectedDate == today) "today" else "this date"}."
                         }
                         Text(
-                            text = emptyMessage,
+                            text = emptySubtext,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (isShadowMonarch) Color(0xFF9E9EAF) else MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         if (hasActiveFilters || trimmedQuery.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(16.dp))
                             TextButton(
                                 onClick = {
                                     searchQuery = ""
@@ -972,95 +851,44 @@ fun HomeScreen(
                             ) {
                                 Text("Clear filters & search")
                             }
-                        }
-
-                        if (selectedDate == today && !hasActiveFilters && trimmedQuery.isEmpty()) {
-                            Spacer(modifier = Modifier.height(20.dp))
-                            com.example.ui.components.TomorrowPreviewCard(
-                                summary = tomorrowSummary,
-                                onReviewTasks = { showTomorrowReviewSheet = true },
-                                isShadowMonarch = isShadowMonarch,
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                            )
+                        } else {
+                            Button(
+                                onClick = onAddTaskClick,
+                                modifier = Modifier
+                                    .height(46.dp)
+                                    .pressScale()
+                                    .testTag("inline_add_task_button"),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = if (isShadowMonarch) {
+                                    ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF7967E8),
+                                        contentColor = Color.White
+                                    )
+                                } else {
+                                    ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Add Task",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
                         }
                     }
                 }
             } else {
-                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-                var previousTasks by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(filteredTasks) }
-
-                androidx.compose.runtime.SideEffect {
-                    if (previousTasks != filteredTasks) {
-                        listState.requestScrollToItem(
-                            listState.firstVisibleItemIndex,
-                            listState.firstVisibleItemScrollOffset
-                        )
-                        previousTasks = filteredTasks
-                    }
-                }
-
-                var taskToDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<ActivityTask?>(null) }
-                
-                if (taskToDelete != null) {
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { taskToDelete = null },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Rounded.Delete,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        },
-                        title = {
-                            Text(
-                                text = "Delete Task?",
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                        },
-                        text = {
-                            Text(
-                                text = "Are you sure you want to permanently delete '${taskToDelete?.title}'?\nThis action cannot be undone.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        confirmButton = {
-                            androidx.compose.material3.Button(
-                                onClick = {
-                                    taskToDelete?.let { viewModel.deleteTask(it) }
-                                    taskToDelete = null
-                                },
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor = MaterialTheme.colorScheme.onError
-                                )
-                            ) {
-                                Text("Delete")
-                            }
-                        },
-                        dismissButton = {
-                            androidx.compose.material3.TextButton(
-                                onClick = { taskToDelete = null }
-                            ) {
-                                Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
-                            }
-                        },
-                        shape = RoundedCornerShape(24.dp),
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 6.dp
-                    )
-                }
-
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    if (datedTasks.isNotEmpty()) {
-                        items(datedTasks, key = { it.id }) { task ->
+                if (datedTasks.isNotEmpty()) {
+                    items(datedTasks, key = { it.id }) { task ->
+                        Box(modifier = Modifier.padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp)) {
                             TaskItemCard(
                                 task = task,
                                 categories = dbCategories,
@@ -1071,47 +899,45 @@ fun HomeScreen(
                                 onClick = { onTaskClick(task.id) },
                                 isNewlyCreated = (task.id == newlyCreatedTaskId),
                                 onEntranceAnimationFinished = { viewModel.clearNewlyCreatedTaskId() },
-                                modifier = Modifier.animateItem(
-                                    fadeInSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
-                                    fadeOutSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-                                    placementSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
-                                ),
                                 themeMode = themeMode
                             )
                         }
                     }
+                }
 
-                    if (noDateTasks.isNotEmpty()) {
-                        item {
-                            Row(
+                if (noDateTasks.isNotEmpty()) {
+                    item {
+                        val noDateSidePadding = if (isShadowMonarch) 16.dp else 24.dp
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = noDateSidePadding, end = noDateSidePadding, top = 8.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "No due date",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 16.dp, bottom = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .background(
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "No due date",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.primary
+                                    text = "${noDateTasks.size}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .background(
-                                            color = MaterialTheme.colorScheme.primaryContainer,
-                                            shape = RoundedCornerShape(12.dp)
-                                        )
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "${noDateTasks.size}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
                             }
                         }
-                        items(noDateTasks, key = { it.id }) { task ->
+                    }
+                    items(noDateTasks, key = { it.id }) { task ->
+                        Box(modifier = Modifier.padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp)) {
                             TaskItemCard(
                                 task = task,
                                 categories = dbCategories,
@@ -1122,30 +948,68 @@ fun HomeScreen(
                                 onClick = { onTaskClick(task.id) },
                                 isNewlyCreated = (task.id == newlyCreatedTaskId),
                                 onEntranceAnimationFinished = { viewModel.clearNewlyCreatedTaskId() },
-                                modifier = Modifier.animateItem(
-                                    fadeInSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
-                                    fadeOutSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-                                    placementSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
-                                ),
                                 themeMode = themeMode
                             )
                         }
                     }
+                }
 
-                    if (selectedDate == today) {
-                        item {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            com.example.ui.components.TomorrowPreviewCard(
-                                summary = tomorrowSummary,
-                                onReviewTasks = { showTomorrowReviewSheet = true },
-                                isShadowMonarch = isShadowMonarch
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 8.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        OutlinedButton(
+                            onClick = onAddTaskClick,
+                            modifier = Modifier
+                                .height(42.dp)
+                                .pressScale()
+                                .testTag("inline_add_task_button_small"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Add Task",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
                             )
                         }
                     }
+                }
+            }
 
-                    item {
-                        Spacer(modifier = Modifier.height(80.dp))
+            // 5. TOMORROW PREVIEW
+            if (selectedDate == today) {
+                item {
+                    Box(modifier = Modifier.padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp)) {
+                        com.example.ui.components.TomorrowPreviewCard(
+                            summary = tomorrowSummary,
+                            onReviewTasks = { showTomorrowReviewSheet = true },
+                            isShadowMonarch = isShadowMonarch
+                        )
                     }
+                }
+            }
+
+            // 6. END-OF-DAY REVIEW
+            if (!selectedDate.isAfter(today)) {
+                item {
+                    val reviewSummary = remember(selectedDate, tasks, allDailyScores, allXpEvents) {
+                        viewModel.getDaySummaryForReview(selectedDate.toString())
+                    }
+                    val existingReview = allEndOfDayReviews.find { it.date == selectedDate.toString() }
+                    com.example.ui.components.EndOfDayReviewCard(
+                        summary = reviewSummary,
+                        review = existingReview,
+                        onOpenReview = { showEndOfDayReviewSheet = true },
+                        modifier = Modifier.padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp)
+                    )
                 }
             }
         }
@@ -1529,9 +1393,14 @@ fun TaskItemCard(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
+                        val view = androidx.compose.ui.platform.LocalView.current
                         Checkbox(
                             checked = task.isCompleted,
-                            onCheckedChange = { onToggleComplete(task) },
+                            onCheckedChange = {
+                                if (!task.isCompleted) com.example.util.KisekiHaptics.performTaskComplete(view)
+                                else com.example.util.KisekiHaptics.performTaskUncomplete(view)
+                                onToggleComplete(task)
+                            },
                             colors = if (isShadowMonarch) {
                                 CheckboxDefaults.colors(
                                     checkedColor = MonarchPrimary,
@@ -2497,6 +2366,7 @@ fun MonarchTaskCard(
                     .background(priorityAccentColor)
             )
 
+            val view = androidx.compose.ui.platform.LocalView.current
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -2506,7 +2376,11 @@ fun MonarchTaskCard(
             ) {
                 MonarchCheckbox(
                     checked = task.isCompleted,
-                    onCheckedChange = { onToggleComplete(task) }
+                    onCheckedChange = {
+                        if (!task.isCompleted) com.example.util.KisekiHaptics.performTaskComplete(view)
+                        else com.example.util.KisekiHaptics.performTaskUncomplete(view)
+                        onToggleComplete(task)
+                    }
                 )
 
                 Column(

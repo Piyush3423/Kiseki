@@ -1003,6 +1003,7 @@ fun AddTaskScreen(
                     Text("Cancel")
                 }
                 Spacer(modifier = Modifier.width(16.dp))
+                val view = androidx.compose.ui.platform.LocalView.current
                 Button(
                     modifier = Modifier.pressScale(0.98f),
                     enabled = !isSaving,
@@ -1057,6 +1058,7 @@ fun AddTaskScreen(
                                     showDuplicateDialog = true
                                 } else {
                                     isSaving = true
+                                    com.example.util.KisekiHaptics.performTaskSaved(view)
                                     if (taskToEdit != null) viewModel.updateTask(newTask) else viewModel.insertTask(newTask)
                                     onNavigateBack()
                                 }

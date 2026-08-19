@@ -176,6 +176,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    val view = androidx.compose.ui.platform.LocalView.current
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -185,14 +186,20 @@ fun SettingsScreen(
                             label = "System",
                             icon = Icons.Rounded.SettingsBrightness,
                             isSelected = preferences.themeMode == ThemeMode.SYSTEM,
-                            onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) }
+                            onClick = {
+                                com.example.util.KisekiHaptics.performToggle(view)
+                                viewModel.setThemeMode(ThemeMode.SYSTEM)
+                            }
                         )
                         ThemeOptionChip(
                             modifier = Modifier.weight(1f),
                             label = "Light",
                             icon = Icons.Rounded.LightMode,
                             isSelected = preferences.themeMode == ThemeMode.LIGHT,
-                            onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) }
+                            onClick = {
+                                com.example.util.KisekiHaptics.performToggle(view)
+                                viewModel.setThemeMode(ThemeMode.LIGHT)
+                            }
                         )
                     }
                     Row(
@@ -204,7 +211,10 @@ fun SettingsScreen(
                             label = "Dark",
                             icon = Icons.Rounded.DarkMode,
                             isSelected = preferences.themeMode == ThemeMode.DARK,
-                            onClick = { viewModel.setThemeMode(ThemeMode.DARK) }
+                            onClick = {
+                                com.example.util.KisekiHaptics.performToggle(view)
+                                viewModel.setThemeMode(ThemeMode.DARK)
+                            }
                         )
                         ThemeOptionChip(
                             modifier = Modifier.weight(1f),
@@ -217,7 +227,10 @@ fun SettingsScreen(
                                 )
                             },
                             isSelected = preferences.themeMode == ThemeMode.SHADOW_MONARCH,
-                            onClick = { viewModel.setThemeMode(ThemeMode.SHADOW_MONARCH) }
+                            onClick = {
+                                com.example.util.KisekiHaptics.performToggle(view)
+                                viewModel.setThemeMode(ThemeMode.SHADOW_MONARCH)
+                            }
                         )
                     }
                 }
@@ -858,9 +871,13 @@ fun SettingToggleItem(
             )
         }
 
+        val view = androidx.compose.ui.platform.LocalView.current
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = { newValue ->
+                com.example.util.KisekiHaptics.performToggle(view)
+                onCheckedChange(newValue)
+            }
         )
     }
 }

@@ -85,6 +85,7 @@ import com.example.data.repository.ThemeMode
 import com.example.domain.FocusAnalyticsEvaluator
 import com.example.domain.XpEvaluator
 import com.example.viewmodel.ActivityTaskViewModel
+import com.example.viewmodel.FocusTimerState
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -106,7 +107,6 @@ fun FocusScreen(
     val onSurfaceColor = if (isShadowMonarch) Color(0xFFE6E8EE) else MaterialTheme.colorScheme.onBackground
     val mutedColor = if (isShadowMonarch) Color(0xFF8B949E) else MaterialTheme.colorScheme.onSurfaceVariant
 
-    var ticker by remember { mutableLongStateOf(0L) }
     var showCustomDurationDialog by remember { mutableStateOf(false) }
     var customMinutesInput by remember { mutableStateOf("") }
     var showFinishSheet by remember { mutableStateOf(false) }
@@ -115,54 +115,15 @@ fun FocusScreen(
 
     val focusManager = LocalFocusManager.current
 
+    val isTimerRunning = timerState.isRunning
+    val isTimerPaused = timerState.isPaused
+
     // Initialize timer for this task if needed or if not matching
     LaunchedEffect(taskId) {
         if (timerState.taskId != taskId && !timerState.isRunning && !timerState.isPaused) {
             // Task has default estimated duration or 25 min default preset
             val defaultDuration = task?.estimatedDurationMinutes?.takeIf { it > 0 } ?: 25
             viewModel.resetFocusTimer(defaultDuration)
-        }
-    }
-
-    // Timer Ticker Loop
-    LaunchedEffect(timerState.isRunning) {
-        while (timerState.isRunning) {
-            delay(200L)
-            ticker = System.currentTimeMillis()
-        }
-    }
-
-    val actualFocusedMs = remember(ticker, timerState) {
-        viewModel.getActualFocusedDurationMs()
-    }
-
-    val targetMs = timerState.targetDurationMinutes * 60 * 1000L
-    val remainingMs = maxOf(0L, targetMs - actualFocusedMs)
-    val isTimerRunning = timerState.isRunning
-    val isTimerPaused = timerState.isPaused
-    val hasStarted = actualFocusedMs > 0 || isTimerRunning || isTimerPaused
-
-    val progress = if (targetMs > 0) {
-        (actualFocusedMs.toFloat() / targetMs.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress,
-        animationSpec = tween(durationMillis = 250),
-        label = "focusProgress"
-    )
-
-    fun formatTimerDisplay(ms: Long): String {
-        val totalSeconds = (ms + 500) / 1000
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        val hours = minutes / 60
-        val remainingMinutes = minutes % 60
-
-        return if (hours > 0) {
-            String.format("%d:%02d:%02d", hours, remainingMinutes, seconds)
-        } else {
-            String.format("%02d:%02d", remainingMinutes, seconds)
         }
     }
 
@@ -232,6 +193,7 @@ fun FocusScreen(
 
     // Exit Warning Dialog
     if (showExitWarningDialog) {
+        val actualFocusedMs = remember(showExitWarningDialog) { viewModel.getActualFocusedDurationMs() }
         AlertDialog(
             onDismissRequest = { showExitWarningDialog = false },
             title = {
@@ -288,6 +250,7 @@ fun FocusScreen(
     // Finish Session Bottom Sheet
     if (showFinishSheet) {
         val currentTask = task
+        val actualFocusedMs = remember(showFinishSheet) { viewModel.getActualFocusedDurationMs() }
         val isEligibleForXp = actualFocusedMs >= XpEvaluator.FOCUS_SESSION_MIN_MS_FOR_XP
 
         ModalBottomSheet(
@@ -479,7 +442,7 @@ fun FocusScreen(
             ) {
                 IconButton(
                     onClick = {
-                        if (isTimerRunning || actualFocusedMs > 0) {
+                        if (isTimerRunning || isTimerPaused || timerState.accumulatedFocusedMs > 0) {
                             showExitWarningDialog = true
                         } else {
                             onNavigateBack()
@@ -545,59 +508,14 @@ fun FocusScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Main Display Timer (Centered Ring)
-            Box(
-                modifier = Modifier
-                    .size(260.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                // Background Track
-                CircularProgressIndicator(
-                    progress = { 1f },
-                    modifier = Modifier.fillMaxSize(),
-                    color = if (isShadowMonarch) Color(0xFF202638) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    strokeWidth = 6.dp
-                )
-
-                // Animated Active Progress
-                CircularProgressIndicator(
-                    progress = { animatedProgress },
-                    modifier = Modifier.fillMaxSize(),
-                    color = accentColor,
-                    strokeWidth = 6.dp,
-                    strokeCap = StrokeCap.Round
-                )
-
-                // Digital Timer Numbers
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    val displayTime = if (hasStarted) {
-                        formatTimerDisplay(remainingMs)
-                    } else {
-                        formatTimerDisplay(targetMs)
-                    }
-
-                    Text(
-                        text = displayTime,
-                        style = MaterialTheme.typography.displayMedium.copy(
-                            fontSize = 48.sp,
-                            fontWeight = FontWeight.Light,
-                            letterSpacing = 1.sp,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = onSurfaceColor
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = if (isTimerRunning) "Focusing" else if (isTimerPaused) "Paused" else "${timerState.targetDurationMinutes} min target",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-                        color = if (isTimerRunning) accentColor else mutedColor
-                    )
-                }
-            }
+            FocusTimerDisplay(
+                timerState = timerState,
+                viewModel = viewModel,
+                isShadowMonarch = isShadowMonarch,
+                accentColor = accentColor,
+                onSurfaceColor = onSurfaceColor,
+                mutedColor = mutedColor
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -658,6 +576,7 @@ fun FocusScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Primary Control Buttons (Start, Pause, Finish)
+            val view = androidx.compose.ui.platform.LocalView.current
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -667,6 +586,7 @@ fun FocusScreen(
                     // Start Button
                     Button(
                         onClick = {
+                            com.example.util.KisekiHaptics.performFocusStart(view)
                             viewModel.startFocusTimer(taskId, timerState.targetDurationMinutes)
                         },
                         modifier = Modifier
@@ -690,7 +610,10 @@ fun FocusScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         OutlinedButton(
-                            onClick = { viewModel.pauseFocusTimer() },
+                            onClick = {
+                                com.example.util.KisekiHaptics.performFocusAction(view)
+                                viewModel.pauseFocusTimer()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp),
@@ -707,6 +630,7 @@ fun FocusScreen(
 
                         Button(
                             onClick = {
+                                com.example.util.KisekiHaptics.performFocusFinish(view)
                                 viewModel.pauseFocusTimer()
                                 showFinishSheet = true
                             },
@@ -728,7 +652,10 @@ fun FocusScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         IconButton(
-                            onClick = { viewModel.resetFocusTimer() },
+                            onClick = {
+                                com.example.util.KisekiHaptics.performFocusAction(view)
+                                viewModel.resetFocusTimer()
+                            },
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(RoundedCornerShape(16.dp))
@@ -738,7 +665,10 @@ fun FocusScreen(
                         }
 
                         Button(
-                            onClick = { viewModel.resumeFocusTimer() },
+                            onClick = {
+                                com.example.util.KisekiHaptics.performFocusAction(view)
+                                viewModel.resumeFocusTimer()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp),
@@ -751,7 +681,10 @@ fun FocusScreen(
                         }
 
                         Button(
-                            onClick = { showFinishSheet = true },
+                            onClick = {
+                                com.example.util.KisekiHaptics.performFocusFinish(view)
+                                showFinishSheet = true
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp),
@@ -776,6 +709,110 @@ fun FocusScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun FocusTimerDisplay(
+    timerState: FocusTimerState,
+    viewModel: ActivityTaskViewModel,
+    isShadowMonarch: Boolean,
+    accentColor: Color,
+    onSurfaceColor: Color,
+    mutedColor: Color,
+    modifier: Modifier = Modifier
+) {
+    var ticker by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+
+    LaunchedEffect(timerState.isRunning) {
+        while (timerState.isRunning) {
+            delay(200L)
+            ticker = System.currentTimeMillis()
+        }
+    }
+
+    val actualFocusedMs = remember(ticker, timerState) {
+        viewModel.getActualFocusedDurationMs()
+    }
+
+    val targetMs = timerState.targetDurationMinutes * 60 * 1000L
+    val remainingMs = maxOf(0L, targetMs - actualFocusedMs)
+    val isTimerRunning = timerState.isRunning
+    val isTimerPaused = timerState.isPaused
+    val hasStarted = actualFocusedMs > 0 || isTimerRunning || isTimerPaused
+
+    val progress = if (targetMs > 0L) {
+        (actualFocusedMs.toFloat() / targetMs.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 250),
+        label = "focusProgress"
+    )
+
+    fun formatTimerDisplay(ms: Long): String {
+        val totalSeconds = (ms + 500) / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        val hours = minutes / 60
+        val remainingMinutes = minutes % 60
+
+        return if (hours > 0) {
+            String.format("%d:%02d:%02d", hours, remainingMinutes, seconds)
+        } else {
+            String.format("%02d:%02d", remainingMinutes, seconds)
+        }
+    }
+
+    Box(
+        modifier = modifier.size(260.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            progress = { 1f },
+            modifier = Modifier.fillMaxSize(),
+            color = if (isShadowMonarch) Color(0xFF202638) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            strokeWidth = 6.dp
+        )
+
+        CircularProgressIndicator(
+            progress = { animatedProgress },
+            modifier = Modifier.fillMaxSize(),
+            color = accentColor,
+            strokeWidth = 6.dp,
+            strokeCap = StrokeCap.Round
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            val displayTime = if (hasStarted) {
+                formatTimerDisplay(remainingMs)
+            } else {
+                formatTimerDisplay(targetMs)
+            }
+
+            Text(
+                text = displayTime,
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Light,
+                    letterSpacing = 1.sp,
+                    fontFamily = FontFamily.Monospace
+                ),
+                color = onSurfaceColor
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = if (isTimerRunning) "Focusing" else if (isTimerPaused) "Paused" else "${timerState.targetDurationMinutes} min target",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                color = if (isTimerRunning) accentColor else mutedColor
+            )
         }
     }
 }

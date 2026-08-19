@@ -77,7 +77,15 @@ class ActivityTaskViewModel(
     private val context: Context? = null
 ) : BaseViewModel() {
 
+    private val _isTasksLoaded = MutableStateFlow(false)
+    val isTasksLoaded: StateFlow<Boolean> = _isTasksLoaded.asStateFlow()
+
     init {
+        viewModelScope.launch {
+            repository.allTasks.collect {
+                _isTasksLoaded.value = true
+            }
+        }
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             repository.allTasks.collect { tasks ->
                 val scores = com.example.domain.DailyScoreCalculator.calculateAllScores(tasks)

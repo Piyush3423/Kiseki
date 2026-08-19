@@ -33,10 +33,11 @@ class MainActivity : ComponentActivity() {
         pendingNavigateAction = intent?.getStringExtra("NAVIGATE_ACTION")
         pendingReviewDate = intent?.getStringExtra("REVIEW_DATE")
         val prefsRepository = UserPreferencesRepository(applicationContext)
+        val initialUserPrefs = prefsRepository.getInitialUserPreferencesSync()
 
         setContent {
             val userPrefs by prefsRepository.userPreferencesFlow.collectAsStateWithLifecycle(
-                initialValue = com.example.data.repository.UserPreferences()
+                initialValue = initialUserPrefs
             )
 
             MyApplicationTheme(themeMode = userPrefs.themeMode) {

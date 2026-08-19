@@ -101,6 +101,16 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
+    fun getInitialUserPreferencesSync(): UserPreferences {
+        return try {
+            runBlocking {
+                userPreferencesFlow.first()
+            }
+        } catch (e: Exception) {
+            UserPreferences()
+        }
+    }
+
     fun isRemindersEnabledSync(): Boolean {
         return runBlocking {
             try {
