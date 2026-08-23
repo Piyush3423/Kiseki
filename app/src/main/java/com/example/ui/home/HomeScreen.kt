@@ -468,7 +468,7 @@ fun HomeScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 16.dp, start = 24.dp, end = 24.dp, bottom = 4.dp)
+                            .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp)
                     ) {
                         AnimatedContent(
                             targetState = isSearchActive,
@@ -485,12 +485,13 @@ fun HomeScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Row(
-                                        modifier = Modifier.weight(1f),
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         KisekiHeaderLogo()
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column {
+                                        Column(
+                                            verticalArrangement = Arrangement.spacedBy(0.dp)
+                                        ) {
                                             Text(
                                                 text = "Kiseki",
                                                 style = MaterialTheme.typography.titleLarge.copy(
@@ -508,7 +509,10 @@ fun HomeScreen(
                                             )
                                         }
                                     }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(18.dp)
+                                    ) {
                                         IconButton(
                                             onClick = { isSearchActive = true },
                                             modifier = Modifier.pressScale(0.9f)
@@ -1905,7 +1909,6 @@ fun MonarchHomeHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(68.dp)
             .background(Color(0xFF090B10))
             .drawBehind {
                 drawLine(
@@ -1915,7 +1918,7 @@ fun MonarchHomeHeader(
                     strokeWidth = 1.dp.toPx()
                 )
             }
-            .padding(horizontal = 16.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         if (!isSearchActive) {
@@ -1926,24 +1929,24 @@ fun MonarchHomeHeader(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     KisekiHeaderLogo(color = Color(0xFFF2F3F7))
-                    Column {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
                         Text(
                             text = "Kiseki",
                             style = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 letterSpacing = (-0.5).sp
                             ),
                             color = Color(0xFFF2F3F7)
                         )
                         Text(
-                            text = dateString,
+                            text = "Shape your day. Build your story.",
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Normal
+                                fontWeight = FontWeight.Medium
                             ),
                             color = Color(0xFFA9B0C0)
                         )
@@ -1952,7 +1955,7 @@ fun MonarchHomeHeader(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     IconButton(
                         onClick = onSearchClick,
