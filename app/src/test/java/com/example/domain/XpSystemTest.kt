@@ -128,20 +128,251 @@ class XpSystemTest {
     }
 
     @Test
-    fun testPersistenceSum() {
-        val persistedEvents = listOf(
-            XpEvent(amount = 20, eventType = "TASK_COMPLETED", date = "2026-08-09"),
-            XpEvent(amount = 5, eventType = "ON_TIME_BONUS", date = "2026-08-09"),
-            XpEvent(amount = 30, eventType = "PERFECT_DAY", date = "2026-08-09")
+    fun testTaskUncompletionReversesXpAndOnTimeBonus() {
+        val completedTask = ActivityTask(
+            id = "task-200",
+            title = "Reversal Test",
+            priority = Priority.Medium,
+            isCompleted = true,
+            dueDate = 2000L,
+            completedAt = 1000L
         )
 
-        val totalXp = persistedEvents.sumOf { it.amount }
-        assertEquals(55, totalXp)
+        // Initial completion
+        val initialEvents = XpEvaluator.evaluateTaskCompletion(completedTask, emptyList())
+        val taskCompletedEvent = initialEvents.find { it.eventType == XpEvaluator.EVENT_TASK_COMPLETED }
+        val onTimeEvent = initialEvents.find { it.eventType == XpEvaluator.EVENT_ON_TIME_BONUS }
+        assertEquals(20, taskCompletedEvent?.amount)
+        assertEquals(5, onTimeEvent?.amount)
+
+        // Ledger contains initial events
+        val historyAfterCompletion = initialEvents
+
+        // Uncomplete task
+        val uncompletedTask = completedTask.copy(isCompleted = false, completedAt = null)
+        val reversalEvents = XpEvaluator.evaluateTaskCompletion(uncompletedTask, historyAfterCompletion)
+
+        val taskUncompletedEvent = reversalEvents.find { it.eventType == XpEvaluator.EVENT_TASK_UNCOMPLETED }
+        val onTimeReversalEvent = reversalEvents.find { it.eventType == XpEvaluator.EVENT_ON_TIME_REVERSAL }
+        assertEquals(-20, taskUncompletedEvent?.amount)
+        assertEquals(-5, onTimeReversalEvent?.amount)
+
+        // Total net XP should now be 0
+        val totalNetXp = (historyAfterCompletion + reversalEvents).sumOf { it.amount }
+        assertEquals(0, totalNetXp)
+    }
+
+    @Test
+    fun testCompleteUncompleteCompleteSequence() {
+        val task = ActivityTask(
+            id = "task-300",
+            title = "Toggle Sequence",
+            priority = Priority.High,
+            isCompleted = true,
+            dueDate = 2000L,
+            completedAt = 1000L
+        )
+
+        var ledger = mutableListOf<XpEvent>()
+
+        // 1. Complete -> +35 XP + 5 on-time = +40
+        val step1 = XpEvaluator.evaluateTaskCompletion(task, ledger)
+        ledger.addAll(step1)
+        assertEquals(40, ledger.sumOf { it.amount })
+
+        // 2. Uncomplete -> -35 - 5 = -40
+        val uncompletedTask = task.copy(isCompleted = false)
+        val step2 = XpEvaluator.evaluateTaskCompletion(uncompletedTask, ledger)
+        ledger.addAll(step2)
+        assertEquals(0, ledger.sumOf { it.amount })
+
+        // 3. Complete again -> +35 + 5 = +40
+        val step3 = XpEvaluator.evaluateTaskCompletion(task, ledger)
+        ledger.addAll(step3)
+        assertEquals(40, ledger.sumOf { it.amount })
+    }
+
+    @Test
+    fun testRepeatedSameStateUpdateNoDuplicateXp() {
+        val completedTask = ActivityTask(
+            id = "task-400",
+            title = "Idempotency Test",
+            priority = Priority.Low,
+            isCompleted = true,
+            dueDate = 2000L,
+            completedAt = 1000L
+        )
+
+        val ledger = mutableListOf<XpEvent>()
+
+        // First call
+        val step1 = XpEvaluator.evaluateTaskCompletion(completedTask, ledger)
+        ledger.addAll(step1)
+
+        // Second call with same state
+        val step2 = XpEvaluator.evaluateTaskCompletion(completedTask, ledger)
+        assertTrue(step2.isEmpty())
+        assertEquals(15, ledger.sumOf { it.amount })
+
+        // Uncomplete repeatedly
+        val uncompletedTask = completedTask.copy(isCompleted = false)
+        val step3 = XpEvaluator.evaluateTaskCompletion(uncompletedTask, ledger)
+        ledger.addAll(step3)
+        assertEquals(0, ledger.sumOf { it.amount })
+
+        val step4 = XpEvaluator.evaluateTaskCompletion(uncompletedTask, ledger)
+        assertTrue(step4.isEmpty())
+        assertEquals(0, ledger.sumOf { it.amount })
+    }
+
+    @Test
+    fun testPerfectDayAndHighScoreReversals() {
+        val date = "2026-08-23"
+        val task1 = ActivityTask(id = "p1", title = "P1", isCompleted = true)
+        val task2 = ActivityTask(id = "p2", title = "P2", isCompleted = true)
+
+        var dateLedger = mutableListOf<XpEvent>()
+
+        // Perfect Day + High Score 98 (+30 Perfect Day, +40 High Score)
+        val initialBonuses = XpEvaluator.evaluateDailyBonuses(
+            date = date,
+            tasksForDay = listOf(task1, task2),
+            dailyScore = 98,
+            existingEventsForDate = dateLedger
+        )
+        dateLedger.addAll(initialBonuses)
+        assertEquals(70, dateLedger.sumOf { it.amount })
+
+        // Task 2 uncompleted -> Perfect day broken, score drops to 50
+        val uncompletedTask2 = task2.copy(isCompleted = false)
+        val reversalBonuses = XpEvaluator.evaluateDailyBonuses(
+            date = date,
+            tasksForDay = listOf(task1, uncompletedTask2),
+            dailyScore = 50,
+            existingEventsForDate = dateLedger
+        )
+        dateLedger.addAll(reversalBonuses)
+
+        val pdReversal = reversalBonuses.find { it.eventType == XpEvaluator.EVENT_PERFECT_DAY_REVERSAL }
+        val hsReversal = reversalBonuses.find { it.eventType == XpEvaluator.EVENT_HIGH_SCORE_REVERSAL }
+
+        assertEquals(-30, pdReversal?.amount)
+        assertEquals(-40, hsReversal?.amount)
+        assertEquals(0, dateLedger.sumOf { it.amount })
+    }
+
+    @Test
+    fun testLevelUpFollowedByUncomplete() {
+        val ledger = mutableListOf<XpEvent>()
+
+        // Total XP 80 -> Level 1
+        ledger.add(XpEvent(amount = 80, eventType = "TASK_COMPLETED", taskId = "t1", date = "2026-08-23"))
+        var levelInfo = LevelCalculator.calculateLevelInfo(ledger.sumOf { it.amount })
+        assertEquals(1, levelInfo.level)
+
+        // Award +30 XP -> Total 110 XP -> Level 2
+        ledger.add(XpEvent(amount = 30, eventType = "TASK_COMPLETED", taskId = "t2", date = "2026-08-23"))
+        levelInfo = LevelCalculator.calculateLevelInfo(ledger.sumOf { it.amount })
+        assertEquals(2, levelInfo.level)
+
+        // Reversal -30 XP -> Total 80 XP -> Drops back to Level 1
+        ledger.add(XpEvent(amount = -30, eventType = "TASK_UNCOMPLETED", taskId = "t2", date = "2026-08-23"))
+        levelInfo = LevelCalculator.calculateLevelInfo(ledger.sumOf { it.amount })
+        assertEquals(1, levelInfo.level)
+        assertEquals(80, levelInfo.currentLevelXp)
+    }
+
+    @Test
+    fun testNoNegativeXpAndLevelCoercion() {
+        val ledger = listOf(
+            XpEvent(amount = -50, eventType = "TASK_UNCOMPLETED", date = "2026-08-23")
+        )
+
+        val rawXp = ledger.sumOf { it.amount }
+        assertEquals(-50, rawXp)
+
+        val levelInfo = LevelCalculator.calculateLevelInfo(rawXp)
+        assertEquals(1, levelInfo.level)
+        assertEquals(0, levelInfo.totalXp)
+        assertEquals(0, levelInfo.currentLevelXp)
+        assertEquals(0f, levelInfo.progress, 0.001f)
+    }
+
+    @Test
+    fun testFreshXpLedgerStartsAtZero() {
+        val emptyLedger = emptyList<XpEvent>()
+        val totalXp = emptyLedger.sumOf { it.amount }
+        assertEquals(0, totalXp)
 
         val levelInfo = LevelCalculator.calculateLevelInfo(totalXp)
         assertEquals(1, levelInfo.level)
-        assertEquals(55, levelInfo.currentLevelXp)
+        assertEquals(0, levelInfo.totalXp)
+        assertEquals(0, levelInfo.currentLevelXp)
         assertEquals(100, levelInfo.requiredXpForNextLevel)
-        assertEquals(0.55f, levelInfo.progress, 0.001f)
+        assertEquals(0f, levelInfo.progress, 0.001f)
+    }
+
+    @Test
+    fun testOnePlus20XpEvent() {
+        val ledger = listOf(
+            XpEvent(amount = 20, eventType = XpEvaluator.EVENT_TASK_COMPLETED, date = "2026-08-23")
+        )
+        val totalXp = ledger.sumOf { it.amount }
+        assertEquals(20, totalXp)
+
+        val levelInfo = LevelCalculator.calculateLevelInfo(totalXp)
+        assertEquals(1, levelInfo.level)
+        assertEquals(20, levelInfo.totalXp)
+        assertEquals(20, levelInfo.currentLevelXp)
+        assertEquals(100, levelInfo.requiredXpForNextLevel)
+        assertEquals(0.2f, levelInfo.progress, 0.001f)
+    }
+
+    @Test
+    fun testPlus20ThenMinus20Reversal() {
+        val ledger = listOf(
+            XpEvent(amount = 20, eventType = XpEvaluator.EVENT_TASK_COMPLETED, date = "2026-08-23"),
+            XpEvent(amount = -20, eventType = XpEvaluator.EVENT_TASK_UNCOMPLETED, date = "2026-08-23")
+        )
+        val totalXp = ledger.sumOf { it.amount }
+        assertEquals(0, totalXp)
+
+        val levelInfo = LevelCalculator.calculateLevelInfo(totalXp)
+        assertEquals(1, levelInfo.level)
+        assertEquals(0, levelInfo.totalXp)
+        assertEquals(0, levelInfo.currentLevelXp)
+        assertEquals(100, levelInfo.requiredXpForNextLevel)
+        assertEquals(0f, levelInfo.progress, 0.001f)
+    }
+
+    @Test
+    fun testEmptyDatabaseProducesLevel1AndZeroXp() {
+        val emptyXpEvents = emptyList<XpEvent>()
+        val levelInfo = LevelCalculator.calculateLevelInfo(emptyXpEvents.sumOf { it.amount })
+        assertEquals(1, levelInfo.level)
+        assertEquals(0, levelInfo.totalXp)
+        assertEquals(0, levelInfo.currentLevelXp)
+        assertEquals(100, levelInfo.requiredXpForNextLevel)
+        assertEquals(0f, levelInfo.progress, 0.001f)
+    }
+
+    @Test
+    fun testNoXpCreatedJustByUncompletedTasksOrAppLaunch() {
+        val uncompletedTask = ActivityTask(
+            id = "launch-1",
+            title = "Uncompleted Task",
+            priority = Priority.Medium,
+            isCompleted = false
+        )
+        val newEvents = XpEvaluator.evaluateTaskCompletion(uncompletedTask, emptyList())
+        assertTrue(newEvents.isEmpty())
+
+        val dailyBonuses = XpEvaluator.evaluateDailyBonuses(
+            date = "2026-08-23",
+            tasksForDay = listOf(uncompletedTask),
+            dailyScore = 0,
+            existingEventsForDate = emptyList()
+        )
+        assertTrue(dailyBonuses.isEmpty())
     }
 }

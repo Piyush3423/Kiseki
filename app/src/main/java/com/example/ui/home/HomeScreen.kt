@@ -2,6 +2,7 @@ package com.example.ui.home
 
 import kotlinx.coroutines.launch
 import com.example.ui.components.KisekiLogoBadge
+import com.example.ui.components.KisekiTaskCheckbox
 import com.example.ui.components.MonarchLogo
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
@@ -88,6 +89,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -1313,10 +1315,24 @@ fun TaskItemCard(
     )
 
     val textAlpha by animateFloatAsState(
-        targetValue = if (task.isCompleted) 0.7f else 1f,
+        targetValue = if (task.isCompleted) 0.70f else 1f,
         animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
         label = "TaskTextAlpha"
     )
+
+    val cardPulseAnim = remember(task.id) { androidx.compose.animation.core.Animatable(1f) }
+    var lastCardCompletedState by remember(task.id) { mutableStateOf(task.isCompleted) }
+
+    LaunchedEffect(task.isCompleted) {
+        if (task.isCompleted && !lastCardCompletedState) {
+            lastCardCompletedState = true
+            cardPulseAnim.animateTo(0.99f, tween(durationMillis = 80, easing = FastOutSlowInEasing))
+            cardPulseAnim.animateTo(1f, tween(durationMillis = 120, easing = FastOutSlowInEasing))
+        } else if (!task.isCompleted && lastCardCompletedState) {
+            lastCardCompletedState = false
+            cardPulseAnim.snapTo(1f)
+        }
+    }
 
     val entranceAlpha = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 0f else 1f) }
     val entranceTranslationY = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 10f else 0f) }
@@ -1355,8 +1371,8 @@ fun TaskItemCard(
                 val px10 = 10.dp.toPx()
                 alpha = animatedAlpha * entranceAlpha.value
                 translationY = (entranceTranslationY.value / 10f) * px10
-                scaleX = entranceScale.value
-                scaleY = entranceScale.value
+                scaleX = entranceScale.value * cardPulseAnim.value
+                scaleY = entranceScale.value * cardPulseAnim.value
             }
             .clip(RoundedCornerShape(cardRadius))
             .background(cardBgColor)
@@ -1387,20 +1403,16 @@ fun TaskItemCard(
                         modifier = Modifier.weight(1f)
                     ) {
                         val view = androidx.compose.ui.platform.LocalView.current
-                        Checkbox(
+                        KisekiTaskCheckbox(
                             checked = task.isCompleted,
                             onCheckedChange = {
                                 if (!task.isCompleted) com.example.util.KisekiHaptics.performTaskComplete(view)
                                 else com.example.util.KisekiHaptics.performTaskUncomplete(view)
                                 onToggleComplete(task)
                             },
-                            colors = if (isShadowMonarch) {
-                                CheckboxDefaults.colors(
-                                    checkedColor = MonarchPrimary,
-                                    uncheckedColor = MonarchBorder,
-                                    checkmarkColor = Color.White
-                                )
-                            } else CheckboxDefaults.colors()
+                            activeColor = if (isShadowMonarch) MonarchPrimary else MaterialTheme.colorScheme.primary,
+                            inactiveColor = if (isShadowMonarch) MonarchBorder else MaterialTheme.colorScheme.outline,
+                            checkmarkColor = if (isShadowMonarch) Color.White else MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -1410,8 +1422,8 @@ fun TaskItemCard(
                                 textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                             ),
                             color = when {
-                                task.isCompleted && isShadowMonarch -> MonarchTextMuted
-                                task.isCompleted -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f * textAlpha)
+                                task.isCompleted && isShadowMonarch -> MonarchTextMuted.copy(alpha = 0.70f * textAlpha)
+                                task.isCompleted -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f * textAlpha)
                                 isShadowMonarch -> MonarchTextPrimary
                                 else -> MaterialTheme.colorScheme.onSurface
                             }
@@ -2238,27 +2250,14 @@ fun MonarchCheckbox(
     onCheckedChange: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    KisekiTaskCheckbox(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        activeColor = Color(0xFF7967E8),
+        inactiveColor = Color(0xFF737B8E),
+        checkmarkColor = Color.White,
         modifier = modifier
-            .size(22.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (checked) Color(0xFF7967E8) else Color.Transparent)
-            .border(
-                BorderStroke(1.5.dp, if (checked) Color(0xFF7967E8) else Color(0xFF737B8E)),
-                RoundedCornerShape(6.dp)
-            )
-            .clickable { onCheckedChange() },
-        contentAlignment = Alignment.Center
-    ) {
-        if (checked) {
-            Icon(
-                imageVector = Icons.Rounded.Check,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(14.dp)
-            )
-        }
-    }
+    )
 }
 
 @Composable
@@ -2298,10 +2297,24 @@ fun MonarchTaskCard(
     )
 
     val textAlpha by animateFloatAsState(
-        targetValue = if (task.isCompleted) 0.7f else 1f,
+        targetValue = if (task.isCompleted) 0.70f else 1f,
         animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
         label = "MonarchTextAlpha"
     )
+
+    val cardPulseAnim = remember(task.id) { androidx.compose.animation.core.Animatable(1f) }
+    var lastCardCompletedState by remember(task.id) { mutableStateOf(task.isCompleted) }
+
+    LaunchedEffect(task.isCompleted) {
+        if (task.isCompleted && !lastCardCompletedState) {
+            lastCardCompletedState = true
+            cardPulseAnim.animateTo(0.99f, tween(durationMillis = 80, easing = FastOutSlowInEasing))
+            cardPulseAnim.animateTo(1f, tween(durationMillis = 120, easing = FastOutSlowInEasing))
+        } else if (!task.isCompleted && lastCardCompletedState) {
+            lastCardCompletedState = false
+            cardPulseAnim.snapTo(1f)
+        }
+    }
 
     val entranceAlpha = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 0f else 1f) }
     val entranceTranslationY = remember(task.id) { androidx.compose.animation.core.Animatable(if (isNewlyCreated) 10f else 0f) }
@@ -2328,8 +2341,8 @@ fun MonarchTaskCard(
             .fillMaxWidth()
             .graphicsLayer {
                 val px10 = 10.dp.toPx()
-                scaleX = animatedScale.coerceIn(0.97f, 1f) * entranceScale.value
-                scaleY = animatedScale.coerceIn(0.97f, 1f) * entranceScale.value
+                scaleX = animatedScale.coerceIn(0.97f, 1f) * entranceScale.value * cardPulseAnim.value
+                scaleY = animatedScale.coerceIn(0.97f, 1f) * entranceScale.value * cardPulseAnim.value
                 alpha = animatedAlpha * entranceAlpha.value
                 translationY = (entranceTranslationY.value / 10f) * px10
             }

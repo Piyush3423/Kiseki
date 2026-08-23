@@ -30,6 +30,9 @@ interface XpEventDao {
     @Query("SELECT * FROM xp_events WHERE date = :date AND eventType = :eventType")
     suspend fun getEventsForDateAndType(date: String, eventType: String): List<XpEvent>
 
+    @Query("SELECT * FROM xp_events WHERE date = :date")
+    suspend fun getEventsForDate(date: String): List<XpEvent>
+
     @Query("DELETE FROM xp_events WHERE taskId = :taskId")
     suspend fun deleteEventsForTask(taskId: String)
 

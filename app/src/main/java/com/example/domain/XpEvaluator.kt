@@ -9,6 +9,17 @@ import java.time.ZoneId
 
 object XpEvaluator {
 
+    const val EVENT_TASK_COMPLETED = "TASK_COMPLETED"
+    const val EVENT_ON_TIME_BONUS = "ON_TIME_BONUS"
+    const val EVENT_TASK_UNCOMPLETED = "TASK_UNCOMPLETED"
+    const val EVENT_ON_TIME_REVERSAL = "ON_TIME_REVERSAL"
+
+    const val EVENT_PERFECT_DAY = "PERFECT_DAY"
+    const val EVENT_PERFECT_DAY_REVERSAL = "PERFECT_DAY_REVERSAL"
+
+    const val EVENT_HIGH_SCORE_DAY = "HIGH_SCORE_DAY"
+    const val EVENT_HIGH_SCORE_REVERSAL = "HIGH_SCORE_REVERSAL"
+
     fun getTaskXpAmount(priority: Priority): Int {
         return when (priority) {
             Priority.Low -> 10
@@ -40,33 +51,92 @@ object XpEvaluator {
         task: ActivityTask,
         existingEventsForTask: List<XpEvent>
     ): List<XpEvent> {
-        if (!task.isCompleted) return emptyList()
-
         val newEvents = mutableListOf<XpEvent>()
         val dateStr = getTaskDateStr(task)
 
-        // 1. Task Completed XP
-        val hasCompletedEvent = existingEventsForTask.any { it.eventType == "TASK_COMPLETED" }
-        if (!hasCompletedEvent) {
-            val amount = getTaskXpAmount(task.priority)
-            newEvents.add(
-                XpEvent(
-                    amount = amount,
-                    eventType = "TASK_COMPLETED",
-                    taskId = task.id,
-                    date = dateStr
-                )
-            )
-        }
+        val netTaskCompletedXp = existingEventsForTask
+            .filter { it.eventType == EVENT_TASK_COMPLETED || it.eventType == EVENT_TASK_UNCOMPLETED }
+            .sumOf { it.amount }
 
-        // 2. On-Time Bonus (+5 XP)
-        if (isTaskOnTime(task)) {
-            val hasOnTimeEvent = existingEventsForTask.any { it.eventType == "ON_TIME_BONUS" }
-            if (!hasOnTimeEvent) {
+        val netOnTimeXp = existingEventsForTask
+            .filter { it.eventType == EVENT_ON_TIME_BONUS || it.eventType == EVENT_ON_TIME_REVERSAL }
+            .sumOf { it.amount }
+
+        if (task.isCompleted) {
+            val expectedAmount = getTaskXpAmount(task.priority)
+            if (netTaskCompletedXp <= 0) {
                 newEvents.add(
                     XpEvent(
-                        amount = 5,
-                        eventType = "ON_TIME_BONUS",
+                        amount = expectedAmount,
+                        eventType = EVENT_TASK_COMPLETED,
+                        taskId = task.id,
+                        date = dateStr
+                    )
+                )
+            } else if (netTaskCompletedXp != expectedAmount) {
+                val delta = expectedAmount - netTaskCompletedXp
+                if (delta > 0) {
+                    newEvents.add(
+                        XpEvent(
+                            amount = delta,
+                            eventType = EVENT_TASK_COMPLETED,
+                            taskId = task.id,
+                            date = dateStr
+                        )
+                    )
+                } else if (delta < 0) {
+                    newEvents.add(
+                        XpEvent(
+                            amount = delta,
+                            eventType = EVENT_TASK_UNCOMPLETED,
+                            taskId = task.id,
+                            date = dateStr
+                        )
+                    )
+                }
+            }
+
+            if (isTaskOnTime(task)) {
+                if (netOnTimeXp <= 0) {
+                    newEvents.add(
+                        XpEvent(
+                            amount = 5,
+                            eventType = EVENT_ON_TIME_BONUS,
+                            taskId = task.id,
+                            date = dateStr
+                        )
+                    )
+                }
+            } else {
+                if (netOnTimeXp > 0) {
+                    newEvents.add(
+                        XpEvent(
+                            amount = -netOnTimeXp,
+                            eventType = EVENT_ON_TIME_REVERSAL,
+                            taskId = task.id,
+                            date = dateStr
+                        )
+                    )
+                }
+            }
+        } else {
+            // Task is INCOMPLETE
+            if (netTaskCompletedXp > 0) {
+                newEvents.add(
+                    XpEvent(
+                        amount = -netTaskCompletedXp,
+                        eventType = EVENT_TASK_UNCOMPLETED,
+                        taskId = task.id,
+                        date = dateStr
+                    )
+                )
+            }
+
+            if (netOnTimeXp > 0) {
+                newEvents.add(
+                    XpEvent(
+                        amount = -netOnTimeXp,
+                        eventType = EVENT_ON_TIME_REVERSAL,
                         taskId = task.id,
                         date = dateStr
                     )
@@ -86,49 +156,58 @@ object XpEvaluator {
         val newEvents = mutableListOf<XpEvent>()
 
         // 1. Perfect Day (+30 XP)
-        if (tasksForDay.isNotEmpty() && tasksForDay.all { it.isCompleted }) {
-            val hasPerfectDay = existingEventsForDate.any { it.eventType == "PERFECT_DAY" }
-            if (!hasPerfectDay) {
-                newEvents.add(
-                    XpEvent(
-                        amount = 30,
-                        eventType = "PERFECT_DAY",
-                        date = date
-                    )
+        val isPerfectDay = tasksForDay.isNotEmpty() && tasksForDay.all { it.isCompleted }
+        val targetPerfectDayXp = if (isPerfectDay) 30 else 0
+        val currentPerfectDayXp = existingEventsForDate
+            .filter { it.eventType == EVENT_PERFECT_DAY || it.eventType == EVENT_PERFECT_DAY_REVERSAL }
+            .sumOf { it.amount }
+
+        val perfectDayDelta = targetPerfectDayXp - currentPerfectDayXp
+        if (perfectDayDelta > 0) {
+            newEvents.add(
+                XpEvent(
+                    amount = perfectDayDelta,
+                    eventType = EVENT_PERFECT_DAY,
+                    date = date
                 )
-            }
+            )
+        } else if (perfectDayDelta < 0) {
+            newEvents.add(
+                XpEvent(
+                    amount = perfectDayDelta,
+                    eventType = EVENT_PERFECT_DAY_REVERSAL,
+                    date = date
+                )
+            )
         }
 
         // 2. High Score Day
-        val existingHighScoreEvent = existingEventsForDate.find { it.eventType == "HIGH_SCORE_DAY" }
-        if (dailyScore >= 95) {
-            if (existingHighScoreEvent == null) {
-                newEvents.add(
-                    XpEvent(
-                        amount = 40,
-                        eventType = "HIGH_SCORE_DAY",
-                        date = date
-                    )
+        val targetHighScoreXp = when {
+            dailyScore >= 95 -> 40
+            dailyScore >= 80 -> 20
+            else -> 0
+        }
+        val currentHighScoreXp = existingEventsForDate
+            .filter { it.eventType == EVENT_HIGH_SCORE_DAY || it.eventType == EVENT_HIGH_SCORE_REVERSAL }
+            .sumOf { it.amount }
+
+        val highScoreDelta = targetHighScoreXp - currentHighScoreXp
+        if (highScoreDelta > 0) {
+            newEvents.add(
+                XpEvent(
+                    amount = highScoreDelta,
+                    eventType = EVENT_HIGH_SCORE_DAY,
+                    date = date
                 )
-            } else if (existingHighScoreEvent.amount < 40) {
-                newEvents.add(
-                    XpEvent(
-                        amount = 40 - existingHighScoreEvent.amount, // Delta +20
-                        eventType = "HIGH_SCORE_DAY",
-                        date = date
-                    )
+            )
+        } else if (highScoreDelta < 0) {
+            newEvents.add(
+                XpEvent(
+                    amount = highScoreDelta,
+                    eventType = EVENT_HIGH_SCORE_REVERSAL,
+                    date = date
                 )
-            }
-        } else if (dailyScore >= 80) {
-            if (existingHighScoreEvent == null) {
-                newEvents.add(
-                    XpEvent(
-                        amount = 20,
-                        eventType = "HIGH_SCORE_DAY",
-                        date = date
-                    )
-                )
-            }
+            )
         }
 
         return newEvents

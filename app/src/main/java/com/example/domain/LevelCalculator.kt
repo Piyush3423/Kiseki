@@ -11,7 +11,8 @@ data class LevelInfo(
 object LevelCalculator {
 
     fun calculateLevelInfo(totalXp: Int): LevelInfo {
-        var currentXp = totalXp.coerceAtLeast(0)
+        val safeTotalXp = totalXp.coerceAtLeast(0)
+        var currentXp = safeTotalXp
         var level = 1
         var req = xpForLevel(level)
         while (currentXp >= req) {
@@ -24,7 +25,7 @@ object LevelCalculator {
             level = level,
             currentLevelXp = currentXp,
             requiredXpForNextLevel = req,
-            totalXp = totalXp,
+            totalXp = safeTotalXp,
             progress = progress
         )
     }

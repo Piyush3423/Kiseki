@@ -27,6 +27,10 @@ class XpRepository(private val xpEventDao: XpEventDao) {
         return xpEventDao.getEventsForDateAndType(date, eventType)
     }
 
+    suspend fun getEventsForDate(date: String): List<XpEvent> {
+        return xpEventDao.getEventsForDate(date)
+    }
+
     suspend fun deleteEventsForTask(taskId: String) {
         xpEventDao.deleteEventsForTask(taskId)
     }

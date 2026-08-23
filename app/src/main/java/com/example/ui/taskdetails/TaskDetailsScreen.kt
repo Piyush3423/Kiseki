@@ -357,9 +357,10 @@ private fun TaskDetailsContent(
                 )
                 
                 val view = androidx.compose.ui.platform.LocalView.current
-                Checkbox(
+                com.example.ui.components.KisekiTaskCheckbox(
                     checked = task.isCompleted,
-                    onCheckedChange = { isChecked ->
+                    onCheckedChange = {
+                        val isChecked = !task.isCompleted
                         if (isChecked) com.example.util.KisekiHaptics.performTaskComplete(view)
                         else com.example.util.KisekiHaptics.performTaskUncomplete(view)
                         viewModel.updateTask(task.copy(isCompleted = isChecked))

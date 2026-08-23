@@ -251,31 +251,54 @@ class ActivityTaskViewModel(
         _xpToastAmount.value = null
     }
 
-    private suspend fun checkAndAwardXp(task: ActivityTask) {
+    private suspend fun evaluateAndApplyXpChanges(
+        existingTask: ActivityTask? = null,
+        updatedTask: ActivityTask
+    ) {
         val repo = xpRepository ?: return
-        if (!task.isCompleted) return
 
-        val existingEvents = repo.getEventsForTask(task.id)
-        val newEvents = XpEvaluator.evaluateTaskCompletion(task, existingEvents)
+        // 1. Evaluate task-level XP (completion or uncompletion)
+        val existingEvents = repo.getEventsForTask(updatedTask.id)
+        val newEvents = XpEvaluator.evaluateTaskCompletion(updatedTask, existingEvents)
         if (newEvents.isNotEmpty()) {
             newEvents.forEach { repo.insertEvent(it) }
-            val totalEarned = newEvents.sumOf { it.amount }
-            if (totalEarned > 0) {
-                _xpToastAmount.value = totalEarned
+            val positiveEarned = newEvents.filter { it.amount > 0 }.sumOf { it.amount }
+            if (positiveEarned > 0) {
+                _xpToastAmount.value = positiveEarned
             }
         }
 
-        // Evaluate daily bonuses
-        val dateStr = XpEvaluator.getTaskDateStr(task)
-        val tasksForDay = repository.getAllTasksOneShot().filter {
-            XpEvaluator.getTaskDateStr(it) == dateStr
-        }
-        val currentScore = dailyScoreRepository?.getScoreForDateOneShot(dateStr)?.score ?: 0
-        val existingDateEvents = repo.getEventsForDateAndType(dateStr, "PERFECT_DAY") + repo.getEventsForDateAndType(dateStr, "HIGH_SCORE_DAY")
+        // 2. Recalculate daily scores & evaluate daily bonuses for updatedTask date
+        val dateStr = XpEvaluator.getTaskDateStr(updatedTask)
+        val allTasks = repository.getAllTasksOneShot()
+        val scores = com.example.domain.DailyScoreCalculator.calculateAllScores(allTasks)
+        dailyScoreRepository?.insertScores(scores)
+
+        val tasksForDay = allTasks.filter { XpEvaluator.getTaskDateStr(it) == dateStr }
+        val currentScore = scores.find { it.date == dateStr }?.score ?: 0
+        val existingDateEvents = repo.getEventsForDate(dateStr)
         val bonusEvents = XpEvaluator.evaluateDailyBonuses(dateStr, tasksForDay, currentScore, existingDateEvents)
         if (bonusEvents.isNotEmpty()) {
             bonusEvents.forEach { repo.insertEvent(it) }
         }
+
+        // 3. If existingTask was on a different date, also evaluate daily bonuses for old date
+        if (existingTask != null) {
+            val oldDateStr = XpEvaluator.getTaskDateStr(existingTask)
+            if (oldDateStr != dateStr) {
+                val oldTasksForDay = allTasks.filter { XpEvaluator.getTaskDateStr(it) == oldDateStr }
+                val oldScore = scores.find { it.date == oldDateStr }?.score ?: 0
+                val oldDateEvents = repo.getEventsForDate(oldDateStr)
+                val oldBonusEvents = XpEvaluator.evaluateDailyBonuses(oldDateStr, oldTasksForDay, oldScore, oldDateEvents)
+                if (oldBonusEvents.isNotEmpty()) {
+                    oldBonusEvents.forEach { repo.insertEvent(it) }
+                }
+            }
+        }
+    }
+
+    private suspend fun checkAndAwardXp(task: ActivityTask) {
+        evaluateAndApplyXpChanges(updatedTask = task)
     }
 
     val allGroups: StateFlow<List<TaskGroup>> = (taskGroupRepository?.allGroups
@@ -397,9 +420,7 @@ class ActivityTaskViewModel(
             ReminderScheduler.scheduleOrCancelReminder(it, taskToInsert)
             com.example.widget.KisekiWidgetUpdater.updateAllWidgets(it)
         }
-        if (taskToInsert.isCompleted) {
-            checkAndAwardXp(taskToInsert)
-        }
+        evaluateAndApplyXpChanges(existingTask = null, updatedTask = taskToInsert)
     }
 
     fun updateTask(task: ActivityTask) = viewModelScope.launch {
@@ -440,9 +461,7 @@ class ActivityTaskViewModel(
             com.example.widget.KisekiWidgetUpdater.updateAllWidgets(it)
         }
 
-        if (taskToSave.isCompleted) {
-            checkAndAwardXp(taskToSave)
-        }
+        evaluateAndApplyXpChanges(existingTask = existingTask, updatedTask = taskToSave)
 
         if (existingTask != null && !existingTask.isCompleted && taskToSave.isCompleted && taskToSave.repeatType != RepeatType.None) {
             val nextDueDate = RepeatUtils.calculateNextDueDate(
@@ -497,11 +516,13 @@ class ActivityTaskViewModel(
     }
 
     fun deleteTask(task: ActivityTask) = viewModelScope.launch {
+        val existingTask = repository.getTaskByIdOneShot(task.id) ?: task
         repository.delete(task)
         context?.let {
             ReminderScheduler.cancelReminder(it, task.id)
             com.example.widget.KisekiWidgetUpdater.updateAllWidgets(it)
         }
+        evaluateAndApplyXpChanges(existingTask = existingTask, updatedTask = existingTask.copy(isCompleted = false))
     }
 
     fun insertCategory(category: Category) = viewModelScope.launch {
@@ -587,6 +608,10 @@ class ActivityTaskViewModel(
 
         repository.batchUpdateTasksInGroup(updatedTasks, nextTasks)
 
+        for (completedTask in updatedTasks) {
+            evaluateAndApplyXpChanges(existingTask = groupTasks.find { it.id == completedTask.id }, updatedTask = completedTask)
+        }
+
         context?.let { ctx ->
             updatedTasks.forEach { ReminderScheduler.scheduleOrCancelReminder(ctx, it) }
             nextTasks.forEach { ReminderScheduler.scheduleOrCancelReminder(ctx, it) }
@@ -607,6 +632,10 @@ class ActivityTaskViewModel(
         }
 
         repository.batchUpdateTasksInGroup(updatedTasks)
+
+        for (incompletedTask in updatedTasks) {
+            evaluateAndApplyXpChanges(existingTask = groupTasks.find { it.id == incompletedTask.id }, updatedTask = incompletedTask)
+        }
 
         context?.let { ctx ->
             updatedTasks.forEach { ReminderScheduler.scheduleOrCancelReminder(ctx, it) }
