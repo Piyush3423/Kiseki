@@ -174,29 +174,21 @@ class TomorrowWorkloadCalculatorTest {
         )
         assertFalse(TomorrowWorkloadCalculator.isTaskScheduledForDate(oneTimeToday, tomorrowDate))
 
-        // Daily task due today (should produce occurrence tomorrow)
+        // Daily task due today (should NOT match tomorrow unless rescheduled/occurrence created for tomorrow)
         val dailyTask = ActivityTask(
             title = "Daily Gym",
             dueDate = toEpoch(selectedDate),
             repeatType = RepeatType.Daily
         )
-        assertTrue(TomorrowWorkloadCalculator.isTaskScheduledForDate(dailyTask, tomorrowDate))
+        assertFalse(TomorrowWorkloadCalculator.isTaskScheduledForDate(dailyTask, tomorrowDate))
 
-        // Weekly task due 7 days prior to tomorrow (should match)
-        val weeklyTaskMatch = ActivityTask(
-            title = "Weekly Match",
-            dueDate = toEpoch(tomorrowDate.minusWeeks(1)),
-            repeatType = RepeatType.Weekly
+        // Daily task due tomorrow (matches tomorrow)
+        val dailyTaskTomorrow = ActivityTask(
+            title = "Daily Gym Tomorrow",
+            dueDate = toEpoch(tomorrowDate),
+            repeatType = RepeatType.Daily
         )
-        assertTrue(TomorrowWorkloadCalculator.isTaskScheduledForDate(weeklyTaskMatch, tomorrowDate))
-
-        // Weekly task due 6 days prior (should NOT match)
-        val weeklyTaskNoMatch = ActivityTask(
-            title = "Weekly No Match",
-            dueDate = toEpoch(tomorrowDate.minusDays(6)),
-            repeatType = RepeatType.Weekly
-        )
-        assertFalse(TomorrowWorkloadCalculator.isTaskScheduledForDate(weeklyTaskNoMatch, tomorrowDate))
+        assertTrue(TomorrowWorkloadCalculator.isTaskScheduledForDate(dailyTaskTomorrow, tomorrowDate))
 
         // Completed tomorrow task (should be excluded)
         val completedTomorrow = ActivityTask(

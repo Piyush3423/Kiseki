@@ -256,6 +256,14 @@ private fun TaskDetailsContent(
                     }
                 },
                 actions = {
+                    if (!task.isCompleted) {
+                        IconButton(onClick = {
+                            viewModel.moveTaskToTomorrow(task)
+                            onNavigateBack()
+                        }) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = "Move to Tomorrow", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                     IconButton(onClick = { onStartFocus(task.id) }) {
                         Icon(Icons.Rounded.Timer, contentDescription = "Start Focus", tint = MaterialTheme.colorScheme.primary)
                     }

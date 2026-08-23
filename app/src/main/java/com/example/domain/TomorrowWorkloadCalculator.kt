@@ -37,7 +37,7 @@ object TomorrowWorkloadCalculator {
     const val FALLBACK_MINUTES_HIGH = 45
 
     /**
-     * Determines whether an incomplete task produces an occurrence scheduled for the given target date.
+     * Determines whether an incomplete task is scheduled for the given target date.
      */
     fun isTaskScheduledForDate(task: ActivityTask, targetDate: LocalDate): Boolean {
         if (task.isCompleted) return false
@@ -46,29 +46,7 @@ object TomorrowWorkloadCalculator {
         val zoneId = ZoneId.systemDefault()
         val taskDate = Instant.ofEpochMilli(dueDateMillis).atZone(zoneId).toLocalDate()
 
-        return when {
-            taskDate == targetDate -> true
-            taskDate > targetDate -> false
-            else -> { // taskDate < targetDate
-                when (task.repeatType) {
-                    RepeatType.None -> false
-                    RepeatType.Daily -> true
-                    RepeatType.Weekly -> {
-                        val daysBetween = ChronoUnit.DAYS.between(taskDate, targetDate)
-                        daysBetween > 0 && daysBetween % 7 == 0L
-                    }
-                    RepeatType.Monthly -> {
-                        val monthsBetween = ChronoUnit.MONTHS.between(taskDate, targetDate)
-                        monthsBetween > 0 && taskDate.plusMonths(monthsBetween) == targetDate
-                    }
-                    RepeatType.Custom -> {
-                        val interval = task.customDays?.takeIf { it > 0 } ?: 1
-                        val daysBetween = ChronoUnit.DAYS.between(taskDate, targetDate)
-                        daysBetween > 0 && daysBetween % interval.toLong() == 0L
-                    }
-                }
-            }
-        }
+        return taskDate == targetDate
     }
 
     /**
@@ -88,7 +66,8 @@ object TomorrowWorkloadCalculator {
      */
     fun calculate(allTasks: List<ActivityTask>, baseDate: LocalDate): TomorrowWorkloadSummary {
         val tomorrowDate = baseDate.plusDays(1)
-        val tomorrowTasks = allTasks.filter { isTaskScheduledForDate(it, tomorrowDate) }
+        val rawTomorrowTasks = allTasks.filter { isTaskScheduledForDate(it, tomorrowDate) }
+        val tomorrowTasks = rawTomorrowTasks.distinctBy { it.parentTaskId ?: it.id }
         return calculate(tomorrowTasks)
     }
 

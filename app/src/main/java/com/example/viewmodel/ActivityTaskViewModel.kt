@@ -97,6 +97,7 @@ class ActivityTaskViewModel(
                 catRepo.ensureDefaultCategories()
             }
         }
+        cleanupDuplicateTaskOccurrences()
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             kotlinx.coroutines.flow.combine(
                 repository.allTasks,
@@ -455,33 +456,105 @@ class ActivityTaskViewModel(
             }
         }
 
-        repository.update(taskToSave)
+        val seriesId = taskToSave.parentTaskId ?: taskToSave.id
+        val finalTaskToSave = if (taskToSave.parentTaskId == null) taskToSave.copy(parentTaskId = seriesId) else taskToSave
+
+        repository.update(finalTaskToSave)
         context?.let {
-            ReminderScheduler.scheduleOrCancelReminder(it, taskToSave)
+            ReminderScheduler.scheduleOrCancelReminder(it, finalTaskToSave)
             com.example.widget.KisekiWidgetUpdater.updateAllWidgets(it)
         }
 
-        evaluateAndApplyXpChanges(existingTask = existingTask, updatedTask = taskToSave)
+        evaluateAndApplyXpChanges(existingTask = existingTask, updatedTask = finalTaskToSave)
 
-        if (existingTask != null && !existingTask.isCompleted && taskToSave.isCompleted && taskToSave.repeatType != RepeatType.None) {
+        if (existingTask != null && !existingTask.isCompleted && finalTaskToSave.isCompleted && finalTaskToSave.repeatType != RepeatType.None) {
             val nextDueDate = RepeatUtils.calculateNextDueDate(
-                currentDueDate = taskToSave.dueDate,
-                repeatType = taskToSave.repeatType,
-                customDays = taskToSave.customDays
+                currentDueDate = finalTaskToSave.dueDate,
+                repeatType = finalTaskToSave.repeatType,
+                customDays = finalTaskToSave.customDays
             )
-            val nextTask = taskToSave.copy(
-                id = UUID.randomUUID().toString(),
-                isCompleted = false,
-                completedAt = null,
-                createdAt = System.currentTimeMillis(),
-                dueDate = nextDueDate,
-                reminderTime = if (taskToSave.reminderTime != null && taskToSave.dueDate != null && nextDueDate != null) {
-                    // Adjust reminder time proportionally if recurring
-                    taskToSave.reminderTime + (nextDueDate - taskToSave.dueDate)
-                } else taskToSave.reminderTime
-            )
-            repository.insert(nextTask)
-            context?.let { ReminderScheduler.scheduleOrCancelReminder(it, nextTask) }
+            if (nextDueDate != null) {
+                val zoneId = ZoneId.systemDefault()
+                val nextLocalDate = Instant.ofEpochMilli(nextDueDate).atZone(zoneId).toLocalDate()
+                val allTasks = repository.getAllTasksOneShot()
+
+                val existsOnNextDate = allTasks.any { other ->
+                    val otherSeriesId = other.parentTaskId ?: other.id
+                    val otherLocalDate = other.dueDate?.let { Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate() }
+                    otherSeriesId == seriesId && otherLocalDate == nextLocalDate
+                }
+
+                if (!existsOnNextDate) {
+                    val nextTask = finalTaskToSave.copy(
+                        id = UUID.randomUUID().toString(),
+                        parentTaskId = seriesId,
+                        isCompleted = false,
+                        completedAt = null,
+                        createdAt = System.currentTimeMillis(),
+                        dueDate = nextDueDate,
+                        reminderTime = if (finalTaskToSave.reminderTime != null && finalTaskToSave.dueDate != null) {
+                            finalTaskToSave.reminderTime + (nextDueDate - finalTaskToSave.dueDate)
+                        } else finalTaskToSave.reminderTime
+                    )
+                    repository.insert(nextTask)
+                    context?.let { ReminderScheduler.scheduleOrCancelReminder(it, nextTask) }
+                }
+            }
+        }
+    }
+
+    fun moveTaskToTomorrow(task: ActivityTask) = viewModelScope.launch {
+        val zoneId = ZoneId.systemDefault()
+        val now = LocalDate.now()
+        val seriesId = task.parentTaskId ?: task.id
+
+        val currentTaskDate = task.dueDate?.let {
+            Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate()
+        } ?: now
+
+        val targetLocalDate = if (currentTaskDate.isBefore(now)) now.plusDays(1) else currentTaskDate.plusDays(1)
+
+        val targetDueDateMillis = if (task.dueDate != null) {
+            val currentLocalTime = Instant.ofEpochMilli(task.dueDate).atZone(zoneId).toLocalTime()
+            targetLocalDate.atTime(currentLocalTime).atZone(zoneId).toInstant().toEpochMilli()
+        } else {
+            targetLocalDate.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        }
+
+        val allTasks = repository.getAllTasksOneShot()
+        val existingTomorrowOccurrence = allTasks.find { other ->
+            val otherSeriesId = other.parentTaskId ?: other.id
+            val otherLocalDate = other.dueDate?.let { Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate() }
+            otherSeriesId == seriesId && otherLocalDate == targetLocalDate && other.id != task.id
+        }
+
+        if (existingTomorrowOccurrence != null) {
+            repository.delete(task)
+        } else {
+            val updatedTask = com.example.domain.TaskFrictionEvaluator.recordReschedule(task, targetDueDateMillis)
+                .copy(parentTaskId = seriesId)
+            repository.update(updatedTask)
+            context?.let { ReminderScheduler.scheduleOrCancelReminder(it, updatedTask) }
+        }
+        context?.let { com.example.widget.KisekiWidgetUpdater.updateAllWidgets(it) }
+    }
+
+    fun cleanupDuplicateTaskOccurrences() = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        val allTasks = repository.getAllTasksOneShot()
+        val zoneId = ZoneId.systemDefault()
+
+        val grouped = allTasks.filter { it.dueDate != null }.groupBy { task ->
+            val seriesId = task.parentTaskId ?: task.id
+            val localDate = Instant.ofEpochMilli(task.dueDate!!).atZone(zoneId).toLocalDate()
+            Pair(seriesId, localDate)
+        }
+
+        for ((_, tasksInGroup) in grouped) {
+            if (tasksInGroup.size > 1) {
+                val toKeep = tasksInGroup.find { it.isCompleted } ?: tasksInGroup.first()
+                val toDelete = tasksInGroup.filter { it.id != toKeep.id }
+                toDelete.forEach { repository.delete(it) }
+            }
         }
     }
 
@@ -579,8 +652,13 @@ class ActivityTaskViewModel(
         val updatedTasks = mutableListOf<ActivityTask>()
         val nextTasks = mutableListOf<ActivityTask>()
 
+        val allTasks = repository.getAllTasksOneShot()
+        val zoneId = ZoneId.systemDefault()
+
         for (task in incompleteTasks) {
+            val seriesId = task.parentTaskId ?: task.id
             val completedTask = task.copy(
+                parentTaskId = seriesId,
                 isCompleted = true,
                 completedAt = task.completedAt ?: now
             )
@@ -592,17 +670,33 @@ class ActivityTaskViewModel(
                     repeatType = task.repeatType,
                     customDays = task.customDays
                 )
-                val nextTask = task.copy(
-                    id = UUID.randomUUID().toString(),
-                    isCompleted = false,
-                    completedAt = null,
-                    createdAt = now,
-                    dueDate = nextDueDate,
-                    reminderTime = if (task.reminderTime != null && task.dueDate != null && nextDueDate != null) {
-                        task.reminderTime + (nextDueDate - task.dueDate)
-                    } else task.reminderTime
-                )
-                nextTasks.add(nextTask)
+                if (nextDueDate != null) {
+                    val nextLocalDate = Instant.ofEpochMilli(nextDueDate).atZone(zoneId).toLocalDate()
+                    val existsOnNextDate = allTasks.any { other ->
+                        val otherSeriesId = other.parentTaskId ?: other.id
+                        val otherLocalDate = other.dueDate?.let { Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate() }
+                        otherSeriesId == seriesId && otherLocalDate == nextLocalDate
+                    } || nextTasks.any { other ->
+                        val otherSeriesId = other.parentTaskId ?: other.id
+                        val otherLocalDate = other.dueDate?.let { Instant.ofEpochMilli(it).atZone(zoneId).toLocalDate() }
+                        otherSeriesId == seriesId && otherLocalDate == nextLocalDate
+                    }
+
+                    if (!existsOnNextDate) {
+                        val nextTask = task.copy(
+                            id = UUID.randomUUID().toString(),
+                            parentTaskId = seriesId,
+                            isCompleted = false,
+                            completedAt = null,
+                            createdAt = now,
+                            dueDate = nextDueDate,
+                            reminderTime = if (task.reminderTime != null && task.dueDate != null) {
+                                task.reminderTime + (nextDueDate - task.dueDate)
+                            } else task.reminderTime
+                        )
+                        nextTasks.add(nextTask)
+                    }
+                }
             }
         }
 

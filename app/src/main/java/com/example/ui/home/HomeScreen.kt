@@ -230,7 +230,7 @@ fun HomeScreen(
     val trimmedQuery = searchQuery.trim()
     val priorityWeight = mapOf(Priority.High to 3, Priority.Medium to 2, Priority.Low to 1)
 
-    val (datedTasks, noDateTasks) = androidx.compose.runtime.remember(
+    val (datedTasks, noDateTasks, unfinishedPastTasks) = androidx.compose.runtime.remember(
         tasks,
         trimmedQuery,
         selectedCategory,
@@ -286,13 +286,17 @@ fun HomeScreen(
             }
         }.sortedWith(taskComparator)
 
+        val unfinishedPast = tasks.filter { task ->
+            !task.isCompleted && task.dueDate != null && Instant.ofEpochMilli(task.dueDate).atZone(zoneId).toLocalDate().isBefore(today)
+        }
+
         val noDate = if (selectedDate == today) {
             searchAndFilterMatching.filter { task -> task.dueDate == null }.sortedWith(taskComparator)
         } else {
             emptyList()
         }
 
-        Pair(dated, noDate)
+        Triple(dated, noDate, unfinishedPast)
     }
 
     val filteredTasks = datedTasks + noDateTasks
@@ -778,6 +782,19 @@ fun HomeScreen(
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = if (isShadowMonarch) Color(0xFF7967E8) else MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            if (selectedDate == today && unfinishedPastTasks.isNotEmpty()) {
+                item {
+                    com.example.ui.components.UnfinishedTasksCard(
+                        unfinishedTasks = unfinishedPastTasks,
+                        onMoveToTomorrow = { task -> viewModel.moveTaskToTomorrow(task) },
+                        onKeep = { task -> viewModel.keepTaskAsIs(task) },
+                        onReschedule = { task -> rescheduleFrictionTask = task },
+                        modifier = Modifier.padding(horizontal = if (isShadowMonarch) 16.dp else 24.dp),
+                        isShadowMonarch = isShadowMonarch
                     )
                 }
             }
