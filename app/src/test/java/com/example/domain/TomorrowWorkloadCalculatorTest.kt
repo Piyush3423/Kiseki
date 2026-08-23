@@ -2,6 +2,9 @@ package com.example.domain
 
 import com.example.data.entity.ActivityTask
 import com.example.data.model.Priority
+import com.example.data.model.RepeatType
+import java.time.LocalDate
+import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -143,6 +146,101 @@ class TomorrowWorkloadCalculatorTest {
         assertEquals(WorkloadCategory.OVERLOADED, summary.category)
         assertTrue(summary.isHeavyOrOverloaded)
         assertEquals("7h 20m", summary.formattedDuration)
+    }
+
+    @Test
+    fun isTaskScheduledForDate_filteringTests() {
+        val selectedDate = LocalDate.of(2026, 8, 23)
+        val tomorrowDate = selectedDate.plusDays(1) // 2026-08-24
+        val zoneId = ZoneId.systemDefault()
+
+        fun toEpoch(date: LocalDate): Long {
+            return date.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        }
+
+        // One-time task scheduled for tomorrow
+        val oneTimeTomorrow = ActivityTask(
+            title = "One Time Tomorrow",
+            dueDate = toEpoch(tomorrowDate),
+            repeatType = RepeatType.None
+        )
+        assertTrue(TomorrowWorkloadCalculator.isTaskScheduledForDate(oneTimeTomorrow, tomorrowDate))
+
+        // One-time task scheduled for today (should NOT match tomorrow)
+        val oneTimeToday = ActivityTask(
+            title = "One Time Today",
+            dueDate = toEpoch(selectedDate),
+            repeatType = RepeatType.None
+        )
+        assertFalse(TomorrowWorkloadCalculator.isTaskScheduledForDate(oneTimeToday, tomorrowDate))
+
+        // Daily task due today (should produce occurrence tomorrow)
+        val dailyTask = ActivityTask(
+            title = "Daily Gym",
+            dueDate = toEpoch(selectedDate),
+            repeatType = RepeatType.Daily
+        )
+        assertTrue(TomorrowWorkloadCalculator.isTaskScheduledForDate(dailyTask, tomorrowDate))
+
+        // Weekly task due 7 days prior to tomorrow (should match)
+        val weeklyTaskMatch = ActivityTask(
+            title = "Weekly Match",
+            dueDate = toEpoch(tomorrowDate.minusWeeks(1)),
+            repeatType = RepeatType.Weekly
+        )
+        assertTrue(TomorrowWorkloadCalculator.isTaskScheduledForDate(weeklyTaskMatch, tomorrowDate))
+
+        // Weekly task due 6 days prior (should NOT match)
+        val weeklyTaskNoMatch = ActivityTask(
+            title = "Weekly No Match",
+            dueDate = toEpoch(tomorrowDate.minusDays(6)),
+            repeatType = RepeatType.Weekly
+        )
+        assertFalse(TomorrowWorkloadCalculator.isTaskScheduledForDate(weeklyTaskNoMatch, tomorrowDate))
+
+        // Completed tomorrow task (should be excluded)
+        val completedTomorrow = ActivityTask(
+            title = "Completed Tomorrow",
+            dueDate = toEpoch(tomorrowDate),
+            isCompleted = true
+        )
+        assertFalse(TomorrowWorkloadCalculator.isTaskScheduledForDate(completedTomorrow, tomorrowDate))
+    }
+
+    @Test
+    fun calculate_withBaseDate_filtersTasksCorrectly() {
+        val baseDate = LocalDate.of(2026, 8, 23)
+        val zoneId = ZoneId.systemDefault()
+        fun toEpoch(date: LocalDate): Long = date.atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        val allTasks = listOf(
+            ActivityTask(title = "Task Aug 24", dueDate = toEpoch(baseDate.plusDays(1)), priority = Priority.Medium),
+            ActivityTask(title = "Task Aug 24 Second", dueDate = toEpoch(baseDate.plusDays(1)), priority = Priority.Medium),
+            ActivityTask(title = "Task Aug 25", dueDate = toEpoch(baseDate.plusDays(2)), priority = Priority.High)
+        )
+
+        val summary = TomorrowWorkloadCalculator.calculate(allTasks, baseDate = baseDate)
+
+        assertEquals(2, summary.taskCount)
+        assertEquals(60, summary.totalEstimatedMinutes) // 2 Medium fallback = 30 + 30 = 60
+        assertEquals("Medium", summary.prioritySummary)
+    }
+
+    @Test
+    fun calculate_300Minutes_returns83PercentLoadAndHeavyCategory() {
+        val tasks = listOf(
+            ActivityTask(title = "Task 1", estimatedDurationMinutes = 150, priority = Priority.Medium),
+            ActivityTask(title = "Task 2", estimatedDurationMinutes = 150, priority = Priority.Medium)
+        )
+
+        val summary = TomorrowWorkloadCalculator.calculate(tasks)
+
+        assertEquals(2, summary.taskCount)
+        assertEquals(300, summary.totalEstimatedMinutes)
+        assertEquals(83, summary.loadPercentage) // 300 / 360 = 83.33% -> 83%
+        assertEquals(WorkloadCategory.HEAVY, summary.category)
+        assertTrue(summary.isHeavyOrOverloaded)
+        assertEquals("5h", summary.formattedDuration)
     }
 
     @Test

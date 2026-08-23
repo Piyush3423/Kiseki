@@ -2,6 +2,11 @@ package com.example.domain
 
 import com.example.data.entity.ActivityTask
 import com.example.data.model.Priority
+import com.example.data.model.RepeatType
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import kotlin.math.roundToInt
 
 enum class WorkloadCategory(val displayName: String) {
@@ -20,7 +25,8 @@ data class TomorrowWorkloadSummary(
     val category: WorkloadCategory,
     val isHeavyOrOverloaded: Boolean,
     val formattedDuration: String,
-    val tasks: List<ActivityTask> = emptyList()
+    val tasks: List<ActivityTask> = emptyList(),
+    val prioritySummary: String = ""
 )
 
 object TomorrowWorkloadCalculator {
@@ -29,6 +35,41 @@ object TomorrowWorkloadCalculator {
     const val FALLBACK_MINUTES_LOW = 15
     const val FALLBACK_MINUTES_MEDIUM = 30
     const val FALLBACK_MINUTES_HIGH = 45
+
+    /**
+     * Determines whether an incomplete task produces an occurrence scheduled for the given target date.
+     */
+    fun isTaskScheduledForDate(task: ActivityTask, targetDate: LocalDate): Boolean {
+        if (task.isCompleted) return false
+        val dueDateMillis = task.dueDate ?: return false
+
+        val zoneId = ZoneId.systemDefault()
+        val taskDate = Instant.ofEpochMilli(dueDateMillis).atZone(zoneId).toLocalDate()
+
+        return when {
+            taskDate == targetDate -> true
+            taskDate > targetDate -> false
+            else -> { // taskDate < targetDate
+                when (task.repeatType) {
+                    RepeatType.None -> false
+                    RepeatType.Daily -> true
+                    RepeatType.Weekly -> {
+                        val daysBetween = ChronoUnit.DAYS.between(taskDate, targetDate)
+                        daysBetween > 0 && daysBetween % 7 == 0L
+                    }
+                    RepeatType.Monthly -> {
+                        val monthsBetween = ChronoUnit.MONTHS.between(taskDate, targetDate)
+                        monthsBetween > 0 && taskDate.plusMonths(monthsBetween) == targetDate
+                    }
+                    RepeatType.Custom -> {
+                        val interval = task.customDays?.takeIf { it > 0 } ?: 1
+                        val daysBetween = ChronoUnit.DAYS.between(taskDate, targetDate)
+                        daysBetween > 0 && daysBetween % interval.toLong() == 0L
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * Returns the estimated duration for workload calculation purposes.
@@ -43,12 +84,29 @@ object TomorrowWorkloadCalculator {
     }
 
     /**
-     * Calculates the tomorrow workload summary based on the provided list of tasks scheduled for tomorrow.
+     * Calculates tomorrow workload summary by filtering allTasks for baseDate + 1 day.
+     */
+    fun calculate(allTasks: List<ActivityTask>, baseDate: LocalDate): TomorrowWorkloadSummary {
+        val tomorrowDate = baseDate.plusDays(1)
+        val tomorrowTasks = allTasks.filter { isTaskScheduledForDate(it, tomorrowDate) }
+        return calculate(tomorrowTasks)
+    }
+
+    /**
+     * Calculates workload summary based on the provided list of tasks scheduled for tomorrow.
      */
     fun calculate(tasks: List<ActivityTask>): TomorrowWorkloadSummary {
         val activeTasks = tasks.filter { !it.isCompleted }
         val taskCount = activeTasks.size
         val highPriorityCount = activeTasks.count { it.priority == Priority.High }
+        val mediumPriorityCount = activeTasks.count { it.priority == Priority.Medium }
+
+        val prioritySummary = when {
+            taskCount == 0 -> ""
+            highPriorityCount > 0 -> if (highPriorityCount == 1) "1 High" else "$highPriorityCount High"
+            mediumPriorityCount > 0 -> "Medium"
+            else -> "Low"
+        }
 
         val totalMinutes = activeTasks.sumOf { getEstimatedMinutesForTask(it) }
 
@@ -78,7 +136,8 @@ object TomorrowWorkloadCalculator {
             category = category,
             isHeavyOrOverloaded = isHeavyOrOverloaded,
             formattedDuration = formattedDuration,
-            tasks = activeTasks
+            tasks = activeTasks,
+            prioritySummary = prioritySummary
         )
     }
 

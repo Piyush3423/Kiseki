@@ -189,16 +189,9 @@ fun HomeScreen(
     var selectedDate by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(today) }
     var weekOffset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
 
-    val tomorrowDate = androidx.compose.runtime.remember(today) { today.plusDays(1) }
-    val tomorrowSummary = androidx.compose.runtime.remember(tasks, tomorrowDate) {
-        val zoneId = ZoneId.systemDefault()
-        val tomorrowTasks = tasks.filter { task ->
-            if (task.dueDate != null) {
-                val taskDate = Instant.ofEpochMilli(task.dueDate).atZone(zoneId).toLocalDate()
-                taskDate == tomorrowDate
-            } else false
-        }
-        com.example.domain.TomorrowWorkloadCalculator.calculate(tomorrowTasks)
+    val tomorrowDate = androidx.compose.runtime.remember(selectedDate) { selectedDate.plusDays(1) }
+    val tomorrowSummary = androidx.compose.runtime.remember(tasks, selectedDate) {
+        com.example.domain.TomorrowWorkloadCalculator.calculate(tasks, baseDate = selectedDate)
     }
 
     val startOfWeekDay = if (startWeekOnMonday) DayOfWeek.MONDAY else DayOfWeek.SUNDAY

@@ -183,13 +183,13 @@ fun TomorrowPreviewCard(
                                         .background(Color(0xFFB3261E), CircleShape)
                                 )
                                 Text(
-                                    text = "${summary.highPriorityCount} High",
+                                    text = summary.prioritySummary.ifEmpty { "${summary.highPriorityCount} High" },
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = Color(0xFFB3261E)
                                 )
                             } else {
                                 Text(
-                                    text = "Standard",
+                                    text = summary.prioritySummary.ifEmpty { "Standard" },
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                                     color = if (isShadowMonarch) Color(0xFFD0D0DC) else MaterialTheme.colorScheme.onSurface
                                 )

@@ -775,15 +775,7 @@ class ActivityTaskViewModel(
     }
 
     fun getTomorrowWorkloadSummary(baseDate: LocalDate = LocalDate.now()): com.example.domain.TomorrowWorkloadSummary {
-        val tomorrowDate = baseDate.plusDays(1)
-        val zoneId = ZoneId.systemDefault()
-        val tomorrowTasks = allTasks.value.filter { task ->
-            if (task.dueDate != null) {
-                val taskDate = Instant.ofEpochMilli(task.dueDate).atZone(zoneId).toLocalDate()
-                taskDate == tomorrowDate
-            } else false
-        }
-        return com.example.domain.TomorrowWorkloadCalculator.calculate(tomorrowTasks)
+        return com.example.domain.TomorrowWorkloadCalculator.calculate(allTasks.value, baseDate = baseDate)
     }
 
     fun deleteTemplate(template: TaskGroupTemplate) = viewModelScope.launch {

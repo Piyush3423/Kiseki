@@ -21,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,6 +56,8 @@ fun AddTaskScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val taskToEdit by (if (taskId != null) viewModel.getTaskById(taskId) else kotlinx.coroutines.flow.MutableStateFlow(null)).collectAsStateWithLifecycle()
     val tasks by viewModel.allTasks.collectAsStateWithLifecycle()
     val dbCategories by viewModel.allCategories.collectAsStateWithLifecycle()
@@ -364,6 +368,8 @@ fun AddTaskScreen(
                                                 res.estimatedDurationMinutes?.let { estimatedDurationInput = it.toString() }
                                             }
                                             naturalLanguageInput = ""
+                                            focusManager.clearFocus(force = true)
+                                            keyboardController?.hide()
                                         }
                                     ) {
                                         Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -424,6 +430,8 @@ fun AddTaskScreen(
                                 res.customRepeatDays?.let { customDaysInput = it.toString() }
                                 res.estimatedDurationMinutes?.let { estimatedDurationInput = it.toString() }
                             }
+                            focusManager.clearFocus(force = true)
+                            keyboardController?.hide()
                         },
                         label = {
                             Text(
