@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -28,8 +29,10 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * MonarchLogo - An original, anime-inspired dark fantasy "Shadow Monarch" emblem.
@@ -424,3 +427,23 @@ fun KisekiLogoBadge(
         }
     }
 }
+
+/**
+ * Simple text-based header logo for Kiseki.
+ */
+@Composable
+fun KisekiHeaderLogo(
+    modifier: Modifier = Modifier,
+    color: Color? = null
+) {
+    val textColor = color ?: MaterialTheme.colorScheme.onBackground
+
+    Text(
+        text = "K",
+        fontSize = 26.sp,
+        fontWeight = FontWeight.Bold,
+        color = textColor,
+        modifier = modifier
+    )
+}
+

@@ -1,6 +1,7 @@
 package com.example.ui.home
 
 import kotlinx.coroutines.launch
+import com.example.ui.components.KisekiHeaderLogo
 import com.example.ui.components.KisekiLogoBadge
 import com.example.ui.components.KisekiTaskCheckbox
 import com.example.ui.components.MonarchLogo
@@ -487,11 +488,8 @@ fun HomeScreen(
                                         modifier = Modifier.weight(1f),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        KisekiLogoBadge(
-                                            badgeSize = 40.dp,
-                                            logoSize = 24.dp
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
+                                        KisekiHeaderLogo()
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Column {
                                             Text(
                                                 text = "Kiseki",
@@ -1928,9 +1926,9 @@ fun MonarchHomeHeader(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    MonarchEmblem(size = 32.dp)
+                    KisekiHeaderLogo(color = Color(0xFFF2F3F7))
                     Column {
                         Text(
                             text = "Kiseki",
