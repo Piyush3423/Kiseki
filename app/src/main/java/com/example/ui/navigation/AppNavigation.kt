@@ -17,17 +17,22 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,6 +59,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
@@ -691,61 +698,66 @@ fun MonarchBottomNavigation(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .border(width = 1.dp, color = Color(0xFF202638), shape = RectangleShape),
-        color = Color(0xFF0D1017),
+            .drawBehind {
+                drawLine(
+                    color = Color(0xFF202638),
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, 0f),
+                    strokeWidth = 1.dp.toPx()
+                )
+            },
+        color = Color(0xFF121620),
         tonalElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 12.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .height(64.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEach { (route, label) ->
                 val isSelected = currentDestination?.hierarchy?.any { it.route == route } == true
 
-                Box(
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) Color(0xFF292344) else Color.Transparent)
-                        .clickable { onNavigate(route) }
-                        .padding(vertical = 8.dp, horizontal = 4.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxHeight()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onNavigate(route) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    Box(
+                        modifier = Modifier
+                            .width(42.dp)
+                            .height(30.dp)
+                            .clip(RoundedCornerShape(15.dp))
+                            .background(if (isSelected) Color(0xFF292344) else Color.Transparent),
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .width(16.dp)
-                                    .height(2.dp)
-                                    .clip(RoundedCornerShape(1.dp))
-                                    .background(Color(0xFF7967E8))
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.height(2.dp))
-                        }
-
                         AnimatedNavigationIcon(
                             route = route,
                             selected = isSelected,
                             modifier = Modifier.size(24.dp),
-                            iconColor = if (isSelected) Color(0xFFF2F3F7) else Color(0xFF737B8E)
-                        )
-
-                        Text(
-                            text = label,
-                            style = TextStyle(
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                            ),
-                            color = if (isSelected) Color(0xFFF2F3F7) else Color(0xFF737B8E)
+                            iconColor = if (isSelected) Color(0xFF9585F4) else Color(0xFF737B8E)
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Text(
+                        text = label,
+                        style = TextStyle(
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        ),
+                        color = if (isSelected) Color(0xFFF2F3F7) else Color(0xFFA9B0C0)
+                    )
                 }
             }
         }
